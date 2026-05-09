@@ -1,0 +1,36 @@
+[package]
+name = "gdriver-vfs"
+description = "Virtual file system abstraction for gDriver (FUSE/WinFSP/FileProvider)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Enable FUSE filesystem backend (Linux: always needed; macOS: optional fallback).
+# On macOS, this links against libfuse which requires the macFUSE kernel extension.
+fuse = ["dep:fuser"]
+
+[dependencies]
+gdriver-ipc = { path = "../gdriver-ipc" }
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+shellexpand = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fuser = "0.14"
+libc = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winfsp = "0.12"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+fuser = { version = "0.14", default-features = false, features = ["libfuse"], optional = true }
+libc = "0.2"

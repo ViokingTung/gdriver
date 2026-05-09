@@ -1,0 +1,40 @@
+[package]
+name = "gdriver-app"
+description = "Tauri desktop application shell for gDriver"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gdriver"
+path = "src/main.rs"
+
+[lib]
+name = "gdriver_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+gdriver-ipc = { path = "../../../crates/gdriver-ipc" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+gethostname = { workspace = true }
+libc = { workspace = true }
+
+tauri = { version = "2", features = ["devtools", "tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

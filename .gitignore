@@ -1,0 +1,77 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.pnpm-debug.log*
+.eslintcache
+
+# Tauri
+apps/gdriver-app/src-tauri/target/
+
+# SQLite databases (local dev)
+*.db
+*.db-shm
+*.db-wal
+
+# Environment
+.env
+.env.local
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Swift / Xcode
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+.build/
+
+# Python (Nautilus extension)
+__pycache__/
+*.py[cod]
+
+# NSIS / Windows build
+*.nsi.bak
+
+# macOS
+*.dmg
+*.app
+
+# Code signing
+*.pfx
+*.p12
+packaging/macos/sign-config.sh
+packaging/windows/signing/sign-config.json
+
+# Debug logs
+*.debug.log
+
+# Distribution
+dist/linux/
+dist/windows/
+dist/macos/
+release-assets/
+imgs/
+docs/
+
+# Test/development artifacts with sensitive data
+apps/gdriver-app/src-tauri/~/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Tauri generated schemas (auto-generated)
+apps/gdriver-app/src-tauri/gen/
+
+# TypeScript build info
+*.tsbuildinfo

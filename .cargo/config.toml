@@ -1,0 +1,12 @@
+# Linux: use mold/lld for faster incremental linking
+# Install with: sudo apt install mold  OR  cargo install cargo-binstall && cargo binstall mold
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# macOS: default linker is fine; enable parallel codegen in dev
+[target.'cfg(target_os = "macos")']
+rustflags = []
+
+[build]
+# Uncomment to enable sccache for faster rebuilds across workspaces
+# rustc-wrapper = "sccache"

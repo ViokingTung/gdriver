@@ -1,0 +1,21 @@
+[package]
+name = "gdriver-sync"
+description = "Core sync engine for gDriver (independently testable lib)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+gdriver-ipc = { path = "../gdriver-ipc" }
+gdriver-api = { path = "../gdriver-api" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+notify = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }

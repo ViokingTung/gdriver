@@ -1,0 +1,39 @@
+Windows Registry Editor Version 5.00
+
+; gDriver Windows Shell Extension Unregistration
+;
+; Run as administrator to remove all shell extension entries.
+
+; ─── Context Menu Handler ──────────────────────────────────────────────────
+
+[-HKEY_CLASSES_ROOT\*\shellex\ContextMenuHandlers\gDriver]
+
+[-HKEY_CLASSES_ROOT\Directory\shellex\ContextMenuHandlers\gDriver]
+
+[-HKEY_CLASSES_ROOT\Directory\Background\shellex\ContextMenuHandlers\gDriver]
+
+; ─── Icon Overlays ─────────────────────────────────────────────────────────
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverCloud]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverSyncing]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverSynced]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverError]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverUploading]
+
+; ─── COM Server Registration ───────────────────────────────────────────────
+
+[-HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556600}]
+
+[-HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556601}]
+
+[-HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556602}]
+
+[-HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556603}]
+
+[-HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556604}]
+
+[-HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556605}]

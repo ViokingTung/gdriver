@@ -1,0 +1,6 @@
+{
+  "name": "gDriver Dolphin Extension",
+  "description": "Google Drive sync integration for KDE Dolphin. Shows sync state emblems and provides Drive context menu actions via service menus.",
+  "version": "0.1.0",
+  "url": "https://github.com/user/gdriver"
+}

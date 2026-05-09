@@ -1,0 +1,84 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/gdriver-app/src-tauri",
+    "crates/gdriver-daemon",
+    "crates/gdriver-sync",
+    "crates/gdriver-vfs",
+    "crates/gdriver-api",
+    "crates/gdriver-ipc",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["gDriver Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/gdriver/gdriver"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# File system
+notify = "7"
+dirs = "5"
+
+# Security storage
+keyring = "3"
+
+# Crypto / OAuth
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+
+# Async traits
+async-trait = "0.1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Hashing
+md5 = "0.7"
+
+# Stream utilities
+futures-util = "0.3"
+
+# Env file loading
+dotenvy = "0.15"
+
+# System info
+gethostname = "0.5"
+libc = "0.2"
+
+# Testing utilities
+tempfile = "3"
+
+[profile.dev]
+opt-level = 0
+debug = true
+split-debuginfo = "unpacked"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

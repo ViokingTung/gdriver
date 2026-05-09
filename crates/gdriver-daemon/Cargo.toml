@@ -1,0 +1,52 @@
+[package]
+name = "gdriver-daemon"
+description = "Background sync daemon for gDriver"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gdriver-daemon"
+path = "src/main.rs"
+
+[features]
+default = []
+# Enable FUSE filesystem support (requires macFUSE on macOS).
+fuse = ["gdriver-vfs/fuse"]
+
+[dependencies]
+gdriver-ipc = { path = "../gdriver-ipc" }
+gdriver-api = { path = "../gdriver-api" }
+gdriver-sync = { path = "../gdriver-sync" }
+gdriver-vfs = { path = "../gdriver-vfs" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+notify = { workspace = true }
+dirs = { workspace = true }
+keyring = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+md5 = { workspace = true }
+futures-util = { workspace = true }
+async-trait = { workspace = true }
+dotenvy = { workspace = true }
+toml = "0.8"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.52"
+windows = { version = "0.58", features = [
+    "Data_Xml_Dom",
+    "UI_Notifications",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+wiremock = "0.6"

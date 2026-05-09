@@ -1,0 +1,343 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_NAME: gDriver
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════
+  # Linux — Build .deb, .rpm, .AppImage
+  # ═══════════════════════════════════════════════════════════════════════
+  build-linux:
+    name: Build Linux Packages
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [deb, rpm, appimage]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libappindicator3-dev librsvg2-dev \
+            libfuse3-dev patchelf libssl-dev \
+            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: linux-cargo-
+
+      - name: Build daemon
+        run: cargo build -p gdriver-daemon --release
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+
+      - name: Build Tauri app (${{ matrix.target }})
+        working-directory: apps/gdriver-app
+        run: cargo tauri build --bundles ${{ matrix.target }}
+
+      - name: Run Linux packaging helper
+        if: matrix.target == 'deb'
+        run: bash packaging/linux/build.sh deb
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist/linux
+          find apps/gdriver-app/src-tauri/target/release/bundle -type f \
+            \( -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) \
+            -exec cp {} dist/linux/ \;
+          find target/release/bundle -type f \
+            \( -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" \) \
+            -exec cp {} dist/linux/ \; 2>/dev/null || true
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd dist/linux
+          for f in *; do
+            [ -f "$f" ] && sha256sum "$f" >> SHA256SUMS
+          done
+          cat SHA256SUMS
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages-${{ matrix.target }}
+          path: dist/linux/
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Windows — Build NSIS .exe installer
+  # ═══════════════════════════════════════════════════════════════════════
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Build daemon
+        run: cargo build -p gdriver-daemon --release
+
+      - name: Build shell extension
+        working-directory: extensions/windows-shell
+        run: cargo build --release
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+
+      - name: Build Tauri app (NSIS)
+        working-directory: apps/gdriver-app
+        run: cargo tauri build --bundles nsis
+
+      - name: Run Windows packaging helper
+        shell: pwsh
+        run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/windows
+          Get-ChildItem -Path "apps/gdriver-app/src-tauri/target/release/bundle/nsis" -Filter "*.exe" |
+            Copy-Item -Destination dist/windows/
+          Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Copy-Item -Destination dist/windows/
+
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          cd dist/windows
+          Get-ChildItem * | ForEach-Object {
+            $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash
+            "$hash  $($_.Name)" | Out-File -Append SHA256SUMS.txt
+          }
+          Get-Content SHA256SUMS.txt
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: dist/windows/
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # macOS — Build .dmg
+  # ═══════════════════════════════════════════════════════════════════════
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos-cargo-
+
+      - name: Build daemon (universal)
+        run: |
+          cargo build -p gdriver-daemon --release --target x86_64-apple-darwin
+          cargo build -p gdriver-daemon --release --target aarch64-apple-darwin
+          mkdir -p target/release
+          lipo -create \
+            target/x86_64-apple-darwin/release/gdriver-daemon \
+            target/aarch64-apple-darwin/release/gdriver-daemon \
+            -output target/release/gdriver-daemon
+          file target/release/gdriver-daemon
+
+      - name: Build Swift extensions
+        run: |
+          cd extensions/findersync
+          swift build -c release --arch x86_64 --arch arm64
+          cd ../fileprovider
+          swift build -c release --arch x86_64 --arch arm64
+        continue-on-error: true
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+
+      - name: Build Tauri app (DMG)
+        working-directory: apps/gdriver-app
+        run: cargo tauri build --bundles dmg
+
+      - name: Run macOS packaging helper
+        run: bash packaging/macos/build.sh --skip-sign --skip-notarize
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist/macos
+          find apps/gdriver-app/src-tauri/target/release/bundle -name "*.dmg" \
+            -exec cp {} dist/macos/ \;
+          find target/release/bundle -name "*.dmg" \
+            -exec cp {} dist/macos/ \; 2>/dev/null || true
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd dist/macos
+          for f in *; do
+            [ -f "$f" ] && shasum -a 256 "$f" >> SHA256SUMS
+          done
+          cat SHA256SUMS
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-packages
+          path: dist/macos/
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Create GitHub Release and upload all artifacts
+  # ═══════════════════════════════════════════════════════════════════════
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-windows, build-macos]
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifact structure
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -not -name "SHA256SUMS*" | while read f; do
+            cp "$f" "release-assets/$(basename "$f")"
+          done
+          ls -la release-assets/
+
+      - name: Generate combined SHA-256 checksums
+        run: |
+          cd release-assets
+          sha256sum * 2>/dev/null > SHA256SUMS || true
+          for f in *; do
+            [ -f "$f" ] && sha256sum "$f" >> SHA256SUMS
+          done
+          # Deduplicate
+          sort -u SHA256SUMS -o SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "gDriver ${{ steps.version.outputs.version }}"
+          body: |
+            ## gDriver ${{ steps.version.outputs.version }}
+
+            ### Linux
+            - `gdriver_*.deb` — Debian / Ubuntu
+            - `gdriver_*.rpm` — Fedora / RHEL
+            - `gdriver_*.AppImage` — Universal Linux
+
+            ### Windows
+            - `gDriver_*_x64-setup.exe` — Windows 10/11 x64 Installer
+
+            ### macOS
+            - `gDriver_*.dmg` — macOS 12+ (Universal: Intel + Apple Silicon)
+
+            ### Verification
+            SHA-256 checksums are provided in `SHA256SUMS`.
+
+            ```
+            ${{ steps.version.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

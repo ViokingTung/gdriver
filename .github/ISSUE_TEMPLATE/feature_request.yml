@@ -1,0 +1,35 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. We appreciate your ideas for making gDriver better.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem would this feature solve? Is it related to another issue?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you'd like to see. Be as specific as possible.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative approaches or workarounds you've tried.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This is a small enhancement (UI tweak, minor UX improvement)
+        - label: This is a new feature (significant implementation effort)
+        - label: I'm willing to contribute this feature

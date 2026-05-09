@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  gDriver Windows Installer — WiX Toolset MSI
+  Enterprise deployment via .msi package.
+
+  Build:
+    candle.exe gdriver.wxs -arch x64
+    light.exe gdriver.wixobj -o gDriver_0.1.0_x64.msi
+
+  OR use the build.ps1 script:
+    .\build.ps1 -BuildMode msi
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <Product
+      Id="*"
+      Name="gDriver"
+      Language="1033"
+      Version="0.1.0"
+      Manufacturer="gDriver Contributors"
+      UpgradeCode="E8B7C2D1-AAAA-BBBB-CCCC-DDDDEEEEFF00">
+
+    <Package
+        InstallerVersion="500"
+        Compressed="yes"
+        InstallScope="perMachine"
+        Platform="x64"
+        Manufacturer="gDriver Contributors"
+        Description="Google Drive desktop client"
+        Comments="gDriver Windows Installer"
+        Keywords="gDriver,Google Drive,sync" />
+
+    <!-- Allow major upgrades -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of gDriver is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Require Windows 10+ -->
+    <Condition Message="gDriver requires Windows 10 or later.">
+      <![CDATA[VersionNT >= 603]]>
+    </Condition>
+
+    <!-- ── Directory structure ──────────────────────────────────────── -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <!-- Program Files -->
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="gDriver">
+
+          <!-- Main application files -->
+          <Component Id="MainApp" Guid="*" Win64="yes">
+            <File Id="MainExe"
+                  Name="gdriver.exe"
+                  Source="..\..\..\..\apps\gdriver-app\src-tauri\target\release\gdriver.exe"
+                  KeyPath="yes" />
+            <File Id="DaemonExe"
+                  Name="gdriver-daemon.exe"
+                  Source="..\..\..\..\target\release\gdriver-daemon.exe" />
+            <File Id="ShellDll"
+                  Name="gdriver_shell.dll"
+                  Source="..\..\..\..\extensions\windows-shell\target\release\gdriver_shell.dll" />
+
+            <!-- Register COM DLL -->
+            <Class Id="{D4C2B2A1-1111-2222-3333-444455556600}"
+                   Context="InprocServer32"
+                   Description="gDriver Context Menu Handler"
+                   ThreadingModel="apartment"
+                   ForeignServer="gdriver_shell.dll" />
+            <Class Id="{D4C2B2A1-1111-2222-3333-444455556601}"
+                   Context="InprocServer32"
+                   Description="gDriver Cloud Overlay"
+                   ThreadingModel="apartment"
+                   ForeignServer="gdriver_shell.dll" />
+            <Class Id="{D4C2B2A1-1111-2222-3333-444455556602}"
+                   Context="InprocServer32"
+                   Description="gDriver Syncing Overlay"
+                   ThreadingModel="apartment"
+                   ForeignServer="gdriver_shell.dll" />
+            <Class Id="{D4C2B2A1-1111-2222-3333-444455556603}"
+                   Context="InprocServer32"
+                   Description="gDriver Synced Overlay"
+                   ThreadingModel="apartment"
+                   ForeignServer="gdriver_shell.dll" />
+            <Class Id="{D4C2B2A1-1111-2222-3333-444455556604}"
+                   Context="InprocServer32"
+                   Description="gDriver Error Overlay"
+                   ThreadingModel="apartment"
+                   ForeignServer="gdriver_shell.dll" />
+            <Class Id="{D4C2B2A1-1111-2222-3333-444455556605}"
+                   Context="InprocServer32"
+                   Description="gDriver Uploading Overlay"
+                   ThreadingModel="apartment"
+                   ForeignServer="gdriver_shell.dll" />
+          </Component>
+
+          <!-- WebView2 resources (bundled by Tauri) -->
+          <Component Id="WebView2" Guid="*" Win64="yes">
+            <File Id="WebView2Loader"
+                  Name="WebView2Loader.dll"
+                  Source="..\..\..\..\apps\gdriver-app\src-tauri\target\release\WebView2Loader.dll" />
+          </Component>
+
+        </Directory>
+      </Directory>
+
+      <!-- Start Menu shortcut -->
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="StartMenuFolder" Name="gDriver">
+          <Component Id="StartMenuShortcut" Guid="*" Win64="yes">
+            <Shortcut Id="AppShortcut"
+                      Name="gDriver"
+                      Description="Google Drive desktop client"
+                      Target="[INSTALLFOLDER]gdriver.exe"
+                      WorkingDirectory="INSTALLFOLDER" />
+            <Shortcut Id="UninstallShortcut"
+                      Name="Uninstall gDriver"
+                      Description="Uninstall gDriver"
+                      Target="[System64Folder]msiexec.exe"
+                      Arguments="/x [ProductCode]" />
+            <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
+            <RegistryValue Root="HKCU"
+                           Key="Software\gDriver"
+                           Name="Installed"
+                           Type="integer"
+                           Value="1"
+                           KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+
+      <!-- Desktop shortcut -->
+      <Directory Id="DesktopFolder">
+        <Component Id="DesktopShortcut" Guid="*" Win64="yes">
+          <Shortcut Id="DesktopAppShortcut"
+                    Name="gDriver"
+                    Description="Google Drive desktop client"
+                    Target="[INSTALLFOLDER]gdriver.exe"
+                    WorkingDirectory="INSTALLFOLDER" />
+          <RegistryValue Root="HKCU"
+                         Key="Software\gDriver"
+                         Name="DesktopShortcutInstalled"
+                         Type="integer"
+                         Value="1"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </Directory>
+
+    <!-- ── Features ──────────────────────────────────────────────────── -->
+    <Feature Id="MainFeature" Title="gDriver" Level="1" Absent="disallow"
+             Description="gDriver main application and sync engine">
+      <ComponentRef Id="MainApp" />
+      <ComponentRef Id="WebView2" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <!-- ── Shell Extension Registration ──────────────────────────────── -->
+    <!-- Context Menu Handler -->
+    <Component Id="ShellContextMenu" Guid="*" Win64="yes" Directory="INSTALLFOLDER">
+      <RegistryKey Root="HKCR" Key="*\shellex\ContextMenuHandlers\gDriver">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556600}" />
+      </RegistryKey>
+      <RegistryKey Root="HKCR" Key="Directory\shellex\ContextMenuHandlers\gDriver">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556600}" />
+      </RegistryKey>
+      <RegistryKey Root="HKCR" Key="Directory\Background\shellex\ContextMenuHandlers\gDriver">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556600}" />
+      </RegistryKey>
+    </Component>
+
+    <!-- Icon Overlays -->
+    <Component Id="ShellOverlays" Guid="*" Win64="yes" Directory="INSTALLFOLDER">
+      <RegistryKey Root="HKLM"
+                   Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverCloud">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556601}" />
+      </RegistryKey>
+      <RegistryKey Root="HKLM"
+                   Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverSyncing">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556602}" />
+      </RegistryKey>
+      <RegistryKey Root="HKLM"
+                   Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverSynced">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556603}" />
+      </RegistryKey>
+      <RegistryKey Root="HKLM"
+                   Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverError">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556604}" />
+      </RegistryKey>
+      <RegistryKey Root="HKLM"
+                   Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverUploading">
+        <RegistryValue Type="string" Value="{D4C2B2A1-1111-2222-3333-444455556605}" />
+      </RegistryKey>
+    </Component>
+
+    <!-- Approved Shell Extensions -->
+    <Component Id="ShellApproved" Guid="*" Win64="yes" Directory="INSTALLFOLDER">
+      <RegistryKey Root="HKLM"
+                   Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved">
+        <RegistryValue Name="{D4C2B2A1-1111-2222-3333-444455556600}"
+                       Type="string" Value="gDriver Context Menu Handler" />
+        <RegistryValue Name="{D4C2B2A1-1111-2222-3333-444455556601}"
+                       Type="string" Value="gDriver Cloud Overlay" />
+        <RegistryValue Name="{D4C2B2A1-1111-2222-3333-444455556602}"
+                       Type="string" Value="gDriver Syncing Overlay" />
+        <RegistryValue Name="{D4C2B2A1-1111-2222-3333-444455556603}"
+                       Type="string" Value="gDriver Synced Overlay" />
+        <RegistryValue Name="{D4C2B2A1-1111-2222-3333-444455556604}"
+                       Type="string" Value="gDriver Error Overlay" />
+        <RegistryValue Name="{D4C2B2A1-1111-2222-3333-444455556605}"
+                       Type="string" Value="gDriver Uploading Overlay" />
+      </RegistryKey>
+    </Component>
+
+    <!-- Autostart -->
+    <Component Id="Autostart" Guid="*" Win64="yes" Directory="INSTALLFOLDER">
+      <RegistryKey Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run">
+        <RegistryValue Name="gDriver"
+                       Type="string"
+                       Value="[INSTALLFOLDER]gdriver-daemon.exe" />
+      </RegistryKey>
+    </Component>
+
+    <!-- Application registration -->
+    <Component Id="AppRegistry" Guid="*" Win64="yes" Directory="INSTALLFOLDER">
+      <RegistryKey Root="HKLM" Key="Software\gDriver">
+        <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
+        <RegistryValue Name="Version"    Type="string" Value="0.1.0" />
+      </RegistryKey>
+      <RegistryKey Root="HKLM"
+                   Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\gDriver">
+        <RegistryValue Name="DisplayName"     Type="string" Value="gDriver" />
+        <RegistryValue Name="DisplayVersion"  Type="string" Value="0.1.0" />
+        <RegistryValue Name="Publisher"       Type="string" Value="gDriver Contributors" />
+        <RegistryValue Name="DisplayIcon"     Type="string" Value="[INSTALLFOLDER]gdriver.exe" />
+        <RegistryValue Name="UninstallString" Type="string" Value="[System64Folder]msiexec.exe /x [ProductCode]" />
+      </RegistryKey>
+    </Component>
+
+    <!-- Shell extension feature (separate so it can be deselected) -->
+    <Feature Id="ShellExtension" Title="File Manager Integration" Level="1"
+             Description="Icon overlays and context menu in Windows Explorer">
+      <ComponentRef Id="ShellContextMenu" />
+      <ComponentRef Id="ShellOverlays" />
+      <ComponentRef Id="ShellApproved" />
+    </Feature>
+
+    <Feature Id="RegistryEntries" Title="System Integration" Level="1" Absent="disallow"
+             Description="Application registration and autostart">
+      <ComponentRef Id="Autostart" />
+      <ComponentRef Id="AppRegistry" />
+    </Feature>
+
+    <!-- ── UI ────────────────────────────────────────────────────────── -->
+    <UI>
+      <UIRef Id="WixUI_InstallDir" />
+      <Publish Dialog="WelcomeDlg" Control="Next"
+               Event="NewDialog" Value="InstallDirDlg" Order="2">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Back"
+               Event="NewDialog" Value="WelcomeDlg" Order="2">1</Publish>
+    </UI>
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+  </Product>
+</Wix>

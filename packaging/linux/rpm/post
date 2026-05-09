@@ -1,0 +1,78 @@
+#!/bin/sh
+#
+# gDriver .rpm %post — runs after package installation.
+# Registers Nautilus and Dolphin file-manager extensions.
+#
+
+set -e
+
+APP_NAME="gDriver"
+INSTALL_PREFIX="/usr"
+EXT_DIR="${INSTALL_PREFIX}/share/gdriver/extensions"
+
+# ── Nautilus extension ──────────────────────────────────────────────
+NAUTILUS_EXT_DIR="${INSTALL_PREFIX}/share/nautilus-python/extensions"
+
+if [ -d "${EXT_DIR}/nautilus" ]; then
+    mkdir -p "${NAUTILUS_EXT_DIR}"
+    install -m 0644 "${EXT_DIR}/nautilus/gdriver_nautilus.py" \
+                   "${NAUTILUS_EXT_DIR}/gdriver_nautilus.py"
+    install -m 0644 "${EXT_DIR}/nautilus/gdriver_ipc.py" \
+                   "${NAUTILUS_EXT_DIR}/gdriver_ipc.py"
+    echo "gDriver: Nautilus extension installed."
+fi
+
+# ── Dolphin / KDE service menu ─────────────────────────────────────
+DOLPHIN_SERVICE_DIR="${INSTALL_PREFIX}/share/kservices5/ServiceMenus"
+DOLPHIN_KF6_DIR="${INSTALL_PREFIX}/share/kio/servicemenus"
+
+if [ -d "${EXT_DIR}/dolphin" ]; then
+    DOLPHIN_SCRIPT_DIR="${INSTALL_PREFIX}/share/gdriver-dolphin"
+    mkdir -p "${DOLPHIN_SCRIPT_DIR}"
+    install -m 0755 "${EXT_DIR}/dolphin/gdriver_dolphin_ipc.py" \
+                    "${DOLPHIN_SCRIPT_DIR}/gdriver_dolphin_ipc.py"
+    install -m 0755 "${EXT_DIR}/dolphin/gdriver_dolphin_menu.py" \
+                    "${DOLPHIN_SCRIPT_DIR}/gdriver_dolphin_menu.py"
+
+    for sm_dir in "${DOLPHIN_SERVICE_DIR}" "${DOLPHIN_KF6_DIR}"; do
+        mkdir -p "${sm_dir}"
+        sed "s|\${INSTALL_DIR}|${DOLPHIN_SCRIPT_DIR}|g" \
+            "${EXT_DIR}/dolphin/gdriver-dolphin.desktop" \
+            > "${sm_dir}/gdriver-dolphin.desktop"
+        chmod 0644 "${sm_dir}/gdriver-dolphin.desktop"
+    done
+    echo "gDriver: Dolphin service menu installed."
+fi
+
+# ── Emblem icons ────────────────────────────────────────────────────
+ICON_BASE="${INSTALL_PREFIX}/share/icons/hicolor/scalable/emblems"
+mkdir -p "${ICON_BASE}"
+
+for ext in nautilus dolphin; do
+    if [ -d "${EXT_DIR}/${ext}/icons" ]; then
+        for svg in "${EXT_DIR}/${ext}/icons"/*.svg; do
+            install -m 0644 "${svg}" "${ICON_BASE}/$(basename "${svg}")"
+        done
+        break
+    fi
+done
+
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "${INSTALL_PREFIX}/share/icons/hicolor" || true
+fi
+
+# ── Desktop database ────────────────────────────────────────────────
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${INSTALL_PREFIX}/share/applications" || true
+fi
+
+# ── XDG autostart ───────────────────────────────────────────────────
+AUTOSTART_DIR="/etc/xdg/autostart"
+if [ -f "${INSTALL_PREFIX}/share/applications/${APP_NAME}.desktop" ]; then
+    mkdir -p "${AUTOSTART_DIR}"
+    cp "${INSTALL_PREFIX}/share/applications/${APP_NAME}.desktop" \
+       "${AUTOSTART_DIR}/${APP_NAME}.desktop" || true
+fi
+
+echo "gDriver: post-install complete."
+exit 0

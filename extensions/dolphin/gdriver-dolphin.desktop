@@ -1,0 +1,40 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/all;
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=gDrive
+X-KDE-Submenu[zh_CN]=gDrive
+Icon=google-drive
+
+Actions=AvailableOffline;OnlineOnly;CopyLink;ViewInDrive;Share;
+
+[Desktop Action AvailableOffline]
+Name=Make available offline
+Name[zh_CN]=离线可用
+Icon=emblem-downloads
+Exec=python3 ${INSTALL_DIR}/gdriver_dolphin_menu.py available_offline %U
+
+[Desktop Action OnlineOnly]
+Name=Free up space
+Name[zh_CN]=释放空间
+Icon=emblem-unmounted
+Exec=python3 ${INSTALL_DIR}/gdriver_dolphin_menu.py online_only %U
+
+[Desktop Action CopyLink]
+Name=Copy link
+Name[zh_CN]=复制链接
+Icon=edit-copy
+Exec=python3 ${INSTALL_DIR}/gdriver_dolphin_menu.py copy_link %U
+
+[Desktop Action ViewInDrive]
+Name=View in Drive
+Name[zh_CN]=在 Drive 中查看
+Icon=web-browser
+Exec=python3 ${INSTALL_DIR}/gdriver_dolphin_menu.py view_in_drive %U
+
+[Desktop Action Share]
+Name=Share
+Name[zh_CN]=分享
+Icon=emblem-shared
+Exec=python3 ${INSTALL_DIR}/gdriver_dolphin_menu.py share %U

@@ -1,0 +1,26 @@
+[package]
+name = "gdriver-api"
+description = "Google Drive & Photos API client for gDriver"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+gdriver-ipc = { path = "../gdriver-ipc" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+wiremock = "0.6"
+tempfile = "3"

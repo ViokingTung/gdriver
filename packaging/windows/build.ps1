@@ -1,0 +1,244 @@
+# gDriver Windows Packaging Build Script
+#
+# Usage: .\build.ps1 [-SkipSign] [-BuildMode <nsis|msi|all>]
+#
+# Prerequisites:
+#   - Rust toolchain (rustup) with MSVC target
+#   - Node.js + pnpm
+#   - Tauri CLI: cargo install tauri-cli
+#   - NSIS: choco install nsis  (or from https://nsis.sourceforge.io/)
+#   - (optional) WiX Toolset: choco install wixtoolset
+#   - (optional) Code signing certificate in Windows Certificate Store
+#
+param(
+    [switch] $SkipSign,
+    [ValidateSet("nsis", "msi", "all")]
+    [string] $BuildMode = "nsis"
+)
+
+$ErrorActionPreference = "Stop"
+
+# ── Paths ────────────────────────────────────────────────────────────────
+$ScriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot  = Resolve-Path "$ScriptDir\..\.."
+$TauriDir     = "$ProjectRoot\apps\gdriver-app\src-tauri"
+$DaemonCrate  = "$ProjectRoot\crates\gdriver-daemon"
+$ShellCrate   = "$ProjectRoot\extensions\windows-shell"
+$TargetDir    = "$ProjectRoot\target\release"
+$ShellTarget  = "$ShellCrate\target\release"
+$NsisTemplate = "$ScriptDir\nsis\installer.nsi"
+$SigningDir   = "$ScriptDir\signing"
+
+# ── Output colors ────────────────────────────────────────────────────────
+function Write-Step { Write-Host "`n[gDriver] $args" -ForegroundColor Green }
+function Write-Warn  { Write-Host "[gDriver] WARNING: $args" -ForegroundColor Yellow }
+function Write-Err   { Write-Host "[gDriver] ERROR: $args" -ForegroundColor Red }
+
+# ── Build daemon ─────────────────────────────────────────────────────────
+function Build-Daemon {
+    Write-Step "Building gdriver-daemon (release)..."
+    Push-Location $ProjectRoot
+    cargo build -p gdriver-daemon --release
+    Pop-Location
+
+    if (-not (Test-Path "$TargetDir\gdriver-daemon.exe")) {
+        throw "Daemon binary not found: $TargetDir\gdriver-daemon.exe"
+    }
+    Write-Step "  -> $TargetDir\gdriver-daemon.exe"
+}
+
+# ── Build shell extension ────────────────────────────────────────────────
+function Build-ShellExtension {
+    Write-Step "Building Windows Shell Extension DLL (release)..."
+    Push-Location $ShellCrate
+    cargo build --release
+    Pop-Location
+
+    if (-not (Test-Path "$ShellTarget\gdriver_shell.dll")) {
+        throw "Shell extension DLL not found: $ShellTarget\gdriver_shell.dll"
+    }
+    Write-Step "  -> $ShellTarget\gdriver_shell.dll"
+}
+
+# ── Preprocess NSIS template ─────────────────────────────────────────────
+function Preprocess-NsisTemplate {
+    Write-Step "Preprocessing NSIS template..."
+
+    $templateContent = Get-Content $NsisTemplate -Raw
+
+    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\'
+    $shellAbsPath  = (Resolve-Path "$ShellTarget\gdriver_shell.dll").Path -replace '\\', '\\'
+
+    $templateContent = $templateContent -replace '__DAEMON_BINARY__', $daemonAbsPath
+    $templateContent = $templateContent -replace '__SHELL_DLL__', $shellAbsPath
+
+    # Write preprocessed template next to original
+    $processedPath = "$ScriptDir\nsis\installer.processed.nsi"
+    $templateContent | Set-Content $processedPath -NoNewline
+
+    Write-Step "  -> $processedPath"
+    return $processedPath
+}
+
+# ── Update tauri.conf.json to use processed template ─────────────────────
+function Set-TauriTemplate {
+    param([string] $TemplatePath)
+
+    $tauriConfPath = "$TauriDir\tauri.conf.json"
+    $tauriConf = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
+
+    # Make template path relative to src-tauri for Tauri
+    # The processed template is at packaging/windows/nsis/installer.processed.nsi
+    $relativePath = "..\..\..\..\packaging\windows\nsis\installer.processed.nsi"
+    $tauriConf.bundle.windows.nsis.template = $relativePath
+
+    $tauriConf | ConvertTo-Json -Depth 10 | Set-Content $tauriConfPath
+    Write-Step "  Updated tauri.conf.json to use processed template"
+}
+
+# ── Build Tauri app ──────────────────────────────────────────────────────
+function Invoke-TauriBuild {
+    Write-Step "Building Tauri desktop app (release)..."
+    Push-Location "$ProjectRoot\apps\gdriver-app"
+
+    # Ensure frontend deps
+    if (-not (Test-Path "node_modules")) {
+        pnpm install
+    }
+
+    # Build frontend
+    pnpm build
+
+    # Tauri build (generates NSIS installer)
+    cargo tauri build --bundles $BuildMode
+
+    Pop-Location
+
+    # Find the generated installer
+    $bundleDir = "$TauriDir\target\release\bundle"
+    if ($BuildMode -eq "msi") {
+        $installer = Get-ChildItem "$bundleDir\msi\*.msi" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    } else {
+        $installer = Get-ChildItem "$bundleDir\nsis\*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    }
+
+    if ($installer) {
+        Write-Step "  Installer: $($installer.FullName)"
+    }
+    return $installer
+}
+
+# ── Restore tauri.conf.json ──────────────────────────────────────────────
+function Restore-TauriConf {
+    $tauriConfPath = "$TauriDir\tauri.conf.json"
+    $tauriConf = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
+    $tauriConf.bundle.windows.nsis.template = "..\..\..\..\packaging\windows\nsis\installer.nsi"
+    $tauriConf | ConvertTo-Json -Depth 10 | Set-Content $tauriConfPath
+}
+
+# ── Code signing ─────────────────────────────────────────────────────────
+function Invoke-CodeSign {
+    param([string] $InstallerPath)
+
+    if ($SkipSign) {
+        Write-Warn "Skipping code signing (--skip-sign)"
+        return
+    }
+
+    # Check for signing configuration
+    $signConfig = "$SigningDir\sign-config.json"
+    if (-not (Test-Path $signConfig)) {
+        Write-Warn "No signing config at $signConfig; skipping code signing."
+        Write-Warn "Create packaging/windows/signing/sign-config.json to enable signing."
+        return
+    }
+
+    Write-Step "Code signing $InstallerPath ..."
+
+    $config = Get-Content $signConfig -Raw | ConvertFrom-Json
+    $certThumbprint = $config.certificate_thumbprint
+    $timestampUrl  = $config.timestamp_url
+    if (-not $timestampUrl) { $timestampUrl = "http://timestamp.digicert.com" }
+
+    if ($certThumbprint) {
+        # Sign using certificate from Windows Certificate Store
+        & signtool sign /fd SHA256 `
+            /sha1 $certThumbprint `
+            /tr $timestampUrl `
+            /td SHA256 `
+            /d "gDriver" `
+            /du "https://github.com/gdriver/gdriver" `
+            $InstallerPath
+    }
+    elseif ($config.certificate_file) {
+        # Sign using PFX file + password
+        $certFile = $config.certificate_file
+        $certPass = $config.certificate_password
+
+        if ($certPass) {
+            $securePass = ConvertTo-SecureString $certPass -AsPlainText -Force
+        }
+
+        & signtool sign /fd SHA256 `
+            /f $certFile `
+            /p $certPass `
+            /tr $timestampUrl `
+            /td SHA256 `
+            /d "gDriver" `
+            /du "https://github.com/gdriver/gdriver" `
+            $InstallerPath
+    }
+    else {
+        Write-Warn "No certificate configured in sign-config.json"
+        return
+    }
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Step "  Code signing complete."
+
+        # Generate SHA-256 checksum
+        $checksum = (Get-FileHash $InstallerPath -Algorithm SHA256).Hash
+        "$checksum  $($(Split-Path $InstallerPath -Leaf))" | Out-File "$InstallerPath.sha256" -Encoding ASCII
+        Write-Step "  SHA-256: $checksum"
+    } else {
+        Write-Warn "  Code signing failed (exit code: $LASTEXITCODE)"
+    }
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────
+function Main {
+    Write-Step "=== gDriver Windows Packaging ==="
+    Write-Step "Project root : $ProjectRoot"
+    Write-Step "Build mode   : $BuildMode"
+
+    # 1. Build dependencies
+    Build-Daemon
+    Build-ShellExtension
+
+    # 2. Preprocess NSIS template
+    if ($BuildMode -ne "msi") {
+        $processedTemplate = Preprocess-NsisTemplate
+        Set-TauriTemplate -TemplatePath $processedTemplate
+    }
+
+    # 3. Build Tauri app + installer
+    try {
+        $installer = Invoke-TauriBuild
+
+        # 4. Code sign
+        if ($installer) {
+            Invoke-CodeSign -InstallerPath $installer.FullName
+        }
+    }
+    finally {
+        # Always restore original config
+        if ($BuildMode -ne "msi") {
+            Restore-TauriConf
+        }
+    }
+
+    Write-Step "=== Packaging complete ==="
+    Write-Step "Output: $TauriDir\target\release\bundle\"
+}
+
+Main

@@ -1,0 +1,89 @@
+Windows Registry Editor Version 5.00
+
+; gDriver Windows Shell Extension Registration
+;
+; This file registers the shell extension DLL with Windows Explorer.
+; Run as administrator after installing the DLL to:
+;   %PROGRAMFILES%\gDriver\gdriver_shell.dll
+;
+; To unregister, run: regedit /s unregister.reg
+
+; ─── Context Menu Handler ──────────────────────────────────────────────────
+
+[HKEY_CLASSES_ROOT\*\shellex\ContextMenuHandlers\gDriver]
+@="{D4C2B2A1-1111-2222-3333-444455556600}"
+
+[HKEY_CLASSES_ROOT\Directory\shellex\ContextMenuHandlers\gDriver]
+@="{D4C2B2A1-1111-2222-3333-444455556600}"
+
+[HKEY_CLASSES_ROOT\Directory\Background\shellex\ContextMenuHandlers\gDriver]
+@="{D4C2B2A1-1111-2222-3333-444455556600}"
+
+; ─── Icon Overlay: Cloud Only ──────────────────────────────────────────────
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverCloud]
+@="{D4C2B2A1-1111-2222-3333-444455556601}"
+
+; ─── Icon Overlay: Syncing ─────────────────────────────────────────────────
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverSyncing]
+@="{D4C2B2A1-1111-2222-3333-444455556602}"
+
+; ─── Icon Overlay: Synced ──────────────────────────────────────────────────
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverSynced]
+@="{D4C2B2A1-1111-2222-3333-444455556603}"
+
+; ─── Icon Overlay: Error ───────────────────────────────────────────────────
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverError]
+@="{D4C2B2A1-1111-2222-3333-444455556604}"
+
+; ─── Icon Overlay: Uploading ───────────────────────────────────────────────
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ gDriverUploading]
+@="{D4C2B2A1-1111-2222-3333-444455556605}"
+
+; ─── COM Server Registration ───────────────────────────────────────────────
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556600}]
+@="gDriver Context Menu Handler"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556600}\InProcServer32]
+@="%PROGRAMFILES%\\gDriver\\gdriver_shell.dll"
+"ThreadingModel"="Apartment"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556601}]
+@="gDriver Cloud Overlay"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556601}\InProcServer32]
+@="%PROGRAMFILES%\\gDriver\\gdriver_shell.dll"
+"ThreadingModel"="Apartment"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556602}]
+@="gDriver Syncing Overlay"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556602}\InProcServer32]
+@="%PROGRAMFILES%\\gDriver\\gdriver_shell.dll"
+"ThreadingModel"="Apartment"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556603}]
+@="gDriver Synced Overlay"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556603}\InProcServer32]
+@="%PROGRAMFILES%\\gDriver\\gdriver_shell.dll"
+"ThreadingModel"="Apartment"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556604}]
+@="gDriver Error Overlay"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556604}\InProcServer32]
+@="%PROGRAMFILES%\\gDriver\\gdriver_shell.dll"
+"ThreadingModel"="Apartment"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556605}]
+@="gDriver Uploading Overlay"
+
+[HKEY_CLASSES_ROOT\CLSID\{D4C2B2A1-1111-2222-3333-444455556605}\InProcServer32]
+@="%PROGRAMFILES%\\gDriver\\gdriver_shell.dll"
+"ThreadingModel"="Apartment"

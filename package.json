@@ -1,0 +1,20 @@
+{
+  "name": "gdriver",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cross-platform Google Drive desktop client",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "pnpm -C apps/gdriver-app tauri dev",
+    "build": "pnpm -C apps/gdriver-app build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,css,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

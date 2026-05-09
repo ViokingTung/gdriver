@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# gDriver .deb postrm — runs after package removal.
+# Cleans up extension files and icon cache.
+#
+
+set -e
+
+APP_NAME="gDriver"
+INSTALL_PREFIX="/usr"
+
+# ── Nautilus extension ──────────────────────────────────────────────
+NAUTILUS_EXT_DIR="${INSTALL_PREFIX}/share/nautilus-python/extensions"
+rm -f "${NAUTILUS_EXT_DIR}/gdriver_nautilus.py"
+rm -f "${NAUTILUS_EXT_DIR}/gdriver_ipc.py"
+
+# ── Dolphin service menu ────────────────────────────────────────────
+rm -f "${INSTALL_PREFIX}/share/kservices5/ServiceMenus/gdriver-dolphin.desktop"
+rm -f "${INSTALL_PREFIX}/share/kio/servicemenus/gdriver-dolphin.desktop"
+rm -rf "${INSTALL_PREFIX}/share/gdriver-dolphin"
+
+# ── Emblem icons ────────────────────────────────────────────────────
+ICON_BASE="${INSTALL_PREFIX}/share/icons/hicolor/scalable/emblems"
+for emblem in emblem-gdriver-cloud emblem-gdriver-synced emblem-gdriver-syncing emblem-gdriver-error; do
+    rm -f "${ICON_BASE}/${emblem}.svg"
+done
+
+# Update GTK icon cache
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "${INSTALL_PREFIX}/share/icons/hicolor" || true
+fi
+
+# ── Desktop database ────────────────────────────────────────────────
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${INSTALL_PREFIX}/share/applications" || true
+fi
+
+# ── XDG autostart ───────────────────────────────────────────────────
+rm -f "/etc/xdg/autostart/${APP_NAME}.desktop"
+
+# ── Extension staging area ──────────────────────────────────────────
+rm -rf "${INSTALL_PREFIX}/share/gdriver"
+
+echo "gDriver: post-removal cleanup complete."
+exit 0

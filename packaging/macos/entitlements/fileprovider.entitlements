@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- FileProvider Extension entitlements -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- App Group for XPC with main app and daemon -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(APP_GROUP_IDENTIFIER)</string>
+    </array>
+
+    <!-- FileProvider needs network access for Drive API -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- FileProvider manages files -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Keychain access for token storage -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(APP_IDENTIFIER_PREFIX).io.gdriver.app</string>
+    </array>
+</dict>
+</plist>

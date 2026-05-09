@@ -1,0 +1,7 @@
+{
+  "name": "gDriver",
+  "description": "Google Drive sync integration for GNOME Files (Nautilus). Shows sync state emblems and provides Drive context menu actions.",
+  "version": "0.1.0",
+  "url": "https://github.com/user/gdriver",
+  "nautilus_versions": ["43", "44", "45", "46", "47"]
+}
