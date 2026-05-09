@@ -17,10 +17,7 @@ pub async fn ping(state: State<'_, DaemonState>) -> Result<String, String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    let val = client
-        .call("ping", None)
-        .await
-        .map_err(|e| e.to_string())?;
+    let val = client.call("ping", None).await.map_err(|e| e.to_string())?;
 
     serde_json::from_value::<String>(val).map_err(|e| e.to_string())
 }
@@ -139,9 +136,7 @@ pub async fn get_sync_activity(
 
 /// Return all unresolved sync errors.
 #[tauri::command]
-pub async fn get_sync_errors(
-    state: State<'_, DaemonState>,
-) -> Result<Value, String> {
+pub async fn get_sync_errors(state: State<'_, DaemonState>) -> Result<Value, String> {
     let client = state
         .wait_for_client(std::time::Duration::from_secs(10))
         .await
@@ -165,7 +160,10 @@ pub async fn retry_sync_error(
         .map_err(|e| e.to_string())?;
 
     client
-        .call("sync.retry_error", Some(serde_json::json!({ "errorId": error_id })))
+        .call(
+            "sync.retry_error",
+            Some(serde_json::json!({ "errorId": error_id })),
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -218,7 +216,11 @@ pub async fn get_notifications(
     if let Some(l) = limit {
         params.insert("limit".into(), serde_json::json!(l));
     }
-    let p = if params.is_empty() { None } else { Some(serde_json::Value::Object(params)) };
+    let p = if params.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(params))
+    };
 
     client
         .call("notification.list", p)
@@ -228,17 +230,17 @@ pub async fn get_notifications(
 
 /// Dismiss (delete) a notification.
 #[tauri::command]
-pub async fn dismiss_notification(
-    id: i64,
-    state: State<'_, DaemonState>,
-) -> Result<Value, String> {
+pub async fn dismiss_notification(id: i64, state: State<'_, DaemonState>) -> Result<Value, String> {
     let client = state
         .wait_for_client(std::time::Duration::from_secs(10))
         .await
         .map_err(|e| e.to_string())?;
 
     client
-        .call("notification.dismiss", Some(serde_json::json!({ "id": id })))
+        .call(
+            "notification.dismiss",
+            Some(serde_json::json!({ "id": id })),
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -255,16 +257,17 @@ pub async fn mark_notification_read(
         .map_err(|e| e.to_string())?;
 
     client
-        .call("notification.mark_read", Some(serde_json::json!({ "id": id })))
+        .call(
+            "notification.mark_read",
+            Some(serde_json::json!({ "id": id })),
+        )
         .await
         .map_err(|e| e.to_string())
 }
 
 /// Mark all notifications as read.
 #[tauri::command]
-pub async fn mark_all_notifications_read(
-    state: State<'_, DaemonState>,
-) -> Result<Value, String> {
+pub async fn mark_all_notifications_read(state: State<'_, DaemonState>) -> Result<Value, String> {
     let client = state
         .wait_for_client(std::time::Duration::from_secs(10))
         .await
@@ -490,10 +493,7 @@ pub async fn open_drive_folder(state: State<'_, DaemonState>) -> Result<(), Stri
 
 /// Switch the sync mode (stream ↔ mirror).
 #[tauri::command]
-pub async fn set_sync_mode(
-    state: State<'_, DaemonState>,
-    mode: String,
-) -> Result<Value, String> {
+pub async fn set_sync_mode(state: State<'_, DaemonState>, mode: String) -> Result<Value, String> {
     let client = state
         .wait_for_client(std::time::Duration::from_secs(10))
         .await
@@ -533,13 +533,21 @@ pub fn get_hostname() -> String {
 #[tauri::command]
 pub fn get_platform() -> String {
     #[cfg(target_os = "macos")]
-    { "macOS".to_string() }
+    {
+        "macOS".to_string()
+    }
     #[cfg(target_os = "linux")]
-    { "Linux".to_string() }
+    {
+        "Linux".to_string()
+    }
     #[cfg(target_os = "windows")]
-    { "Windows".to_string() }
+    {
+        "Windows".to_string()
+    }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { "Unknown".to_string() }
+    {
+        "Unknown".to_string()
+    }
 }
 
 /// Submit user feedback to the daemon.
@@ -609,7 +617,10 @@ pub async fn remove_sync_folder(
         .map_err(|e| e.to_string())?;
 
     client
-        .call("folder.remove", Some(serde_json::json!({ "id": folder_id })))
+        .call(
+            "folder.remove",
+            Some(serde_json::json!({ "id": folder_id })),
+        )
         .await
         .map_err(|e| e.to_string())?;
 
