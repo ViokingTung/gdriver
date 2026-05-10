@@ -1,4 +1,5 @@
 // Windows platform integration: auto-start and system notifications.
+#![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use tracing::{info, warn};
@@ -6,7 +7,6 @@ use tracing::{info, warn};
 // ─── Auto-start via Registry ────────────────────────────────────────────────
 
 const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-#[allow(dead_code)]
 const APP_NAME: &str = "gDriver";
 const DAEMON_NAME: &str = "gDriverDaemon";
 

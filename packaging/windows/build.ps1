@@ -84,14 +84,13 @@ function Set-TauriTemplate {
     param([string] $TemplatePath)
 
     $tauriConfPath = "$TauriDir\tauri.conf.json"
-    $tauriConf = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
+    $text = Get-Content $tauriConfPath -Raw
 
-    # Make template path relative to src-tauri for Tauri
-    # The processed template is at packaging/windows/nsis/installer.processed.nsi
-    $relativePath = "..\..\..\..\packaging\windows\nsis\installer.processed.nsi"
-    $tauriConf.bundle.windows.nsis.template = $relativePath
+    # Replace the template path using string substitution to avoid
+    # ConvertTo-Json mangling the JSON structure
+    $text = $text -replace '"template"\s*:\s*"[^"]*"', '"template": "../../../packaging/windows/nsis/installer.processed.nsi"'
 
-    $tauriConf | ConvertTo-Json -Depth 10 | Set-Content $tauriConfPath
+    Set-Content $tauriConfPath $text -NoNewline
     Write-Step "  Updated tauri.conf.json to use processed template"
 }
 
@@ -130,9 +129,9 @@ function Invoke-TauriBuild {
 # ── Restore tauri.conf.json ──────────────────────────────────────────────
 function Restore-TauriConf {
     $tauriConfPath = "$TauriDir\tauri.conf.json"
-    $tauriConf = Get-Content $tauriConfPath -Raw | ConvertFrom-Json
-    $tauriConf.bundle.windows.nsis.template = "..\..\..\..\packaging\windows\nsis\installer.nsi"
-    $tauriConf | ConvertTo-Json -Depth 10 | Set-Content $tauriConfPath
+    $text = Get-Content $tauriConfPath -Raw
+    $text = $text -replace '"template"\s*:\s*"[^"]*"', '"template": "../../../packaging/windows/nsis/installer.nsi"'
+    Set-Content $tauriConfPath $text -NoNewline
 }
 
 # ── Code signing ─────────────────────────────────────────────────────────
