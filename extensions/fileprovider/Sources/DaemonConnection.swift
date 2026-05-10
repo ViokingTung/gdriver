@@ -1,5 +1,6 @@
 import FileProvider
 import Foundation
+import UniformTypeIdentifiers
 
 /// Manages communication with the `gdriver-daemon` process.
 ///
@@ -191,7 +192,7 @@ actor DaemonConnection {
             "parent": identifierToPath(template.parentItemIdentifier),
         ]
 
-        if template.contentType?.conforms(to: .directory) == true {
+        if template.contentType.conforms(to: .directory) {
             params["is_folder"] = true
         }
 
@@ -213,8 +214,8 @@ actor DaemonConnection {
             "path": identifierToPath(item.itemIdentifier),
         ]
 
-        if changedFields.contains(.filename), let name = item.filename {
-            params["new_name"] = name
+        if changedFields.contains(.filename) {
+            params["new_name"] = item.filename
         }
         if changedFields.contains(.parentItemIdentifier) {
             params["new_parent"] = identifierToPath(item.parentItemIdentifier)
@@ -292,10 +293,10 @@ actor DaemonConnection {
         let contentType: UTType = isFolder ? .folder : UTType(filenameExtension: (name as NSString).pathExtension) ?? .data
 
         return FileProviderItem(
-            identifier: identifier,
+            itemIdentifier: identifier,
             filename: name,
             contentType: contentType,
-            parentIdentifier: parentId,
+            parentItemIdentifier: parentId,
             documentSize: NSNumber(value: size),
             creationDate: mtime,
             contentModificationDate: mtime,

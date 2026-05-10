@@ -52,12 +52,11 @@ Var DaemonPID
 
 ; ── Modern UI ────────────────────────────────────────────────────────────
 !define MUI_ABORTWARNING
-!define MUI_ICON "{{icon_path}}"
-!define MUI_UNICON "{{icon_path}}"
+!define MUI_ICON "{{installer_icon}}"
+!define MUI_UNICON "{{installer_icon}}"
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "{{license_path}}"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_STARTMENU Application $StartMenuFolder
 !insertmacro MUI_PAGE_INSTFILES
