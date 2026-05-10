@@ -258,7 +258,7 @@ jobs:
         run: cargo tauri build --bundles dmg
 
       - name: Run macOS packaging helper
-        run: bash packaging/macos/build.sh --skip-sign --skip-notarize
+        run: bash packaging/macos/build.sh --skip-sign --skip-notarize --skip-build
 
       - name: Collect artifacts
         run: |
