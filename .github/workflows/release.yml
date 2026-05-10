@@ -139,31 +139,10 @@ jobs:
           key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: windows-cargo-
 
-      - name: Build daemon
-        run: cargo build -p gdriver-daemon --release
-
-      - name: Build shell extension
-        working-directory: extensions/windows-shell
-        run: cargo build --release
-
-      - name: Preprocess NSIS installer template
-        shell: pwsh
-        run: |
-          $root = $env:GITHUB_WORKSPACE
-          $nsi  = "packaging\windows\nsis\installer.nsi"
-          $text = Get-Content $nsi -Raw
-          $text = $text.Replace("__DAEMON_BINARY__", "$root\target\release\gdriver-daemon.exe")
-          $text = $text.Replace("__SHELL_DLL__",     "$root\target\release\gdriver_shell.dll")
-          Set-Content $nsi $text
-
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Build Tauri app (NSIS)
-        working-directory: apps/gdriver-app
-        run: cargo tauri build --bundles nsis
-
-      - name: Run Windows packaging helper
+      - name: Build and package (NSIS)
         shell: pwsh
         run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
 
