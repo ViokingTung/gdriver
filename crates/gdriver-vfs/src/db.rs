@@ -45,10 +45,7 @@ pub struct FileDetails {
 }
 
 /// Return `FileMeta` for the file with the given inode (rowid), or `None`.
-pub async fn get_file_by_inode(
-    pool: &SqlitePool,
-    inode: u64,
-) -> anyhow::Result<Option<FileMeta>> {
+pub async fn get_file_by_inode(pool: &SqlitePool, inode: u64) -> anyhow::Result<Option<FileMeta>> {
     let row = sqlx::query_as::<_, FileMetaRow>(
         "SELECT rowid, id, name, mime_type, COALESCE(size, 0) AS size,
                 COALESCE(modified_time, 0) AS modified_time
@@ -385,13 +382,11 @@ pub async fn has_children(pool: &SqlitePool, inode: u64) -> anyhow::Result<bool>
     }
 
     // Find the directory's file_id first, then check for children.
-    let dir_id: Option<String> = sqlx::query_scalar(
-        "SELECT id FROM drive_files WHERE rowid = ?",
-    )
-    .bind(inode as i64)
-    .fetch_optional(pool)
-    .await?
-    .flatten();
+    let dir_id: Option<String> = sqlx::query_scalar("SELECT id FROM drive_files WHERE rowid = ?")
+        .bind(inode as i64)
+        .fetch_optional(pool)
+        .await?
+        .flatten();
 
     match dir_id {
         Some(ref dir_id) => {

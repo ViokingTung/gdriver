@@ -124,9 +124,7 @@ pub async fn upload_media_item(
 ) -> anyhow::Result<String> {
     let url = format!("{PHOTOS_API_BASE}/uploads");
 
-    let resp = client
-        .post_raw(&url, content.to_vec(), mime_type)
-        .await?;
+    let resp = client.post_raw(&url, content.to_vec(), mime_type).await?;
 
     // The Photos upload endpoint sends `X-Goog-Upload-Content-Type` as a
     // header hint, but the response body is the plain-text upload token.
@@ -160,12 +158,8 @@ pub async fn upload_media_item_from_path(
     client: &DriveClient,
     local_path: &Path,
 ) -> anyhow::Result<String> {
-    let mime = photos_mime_type(local_path).ok_or_else(|| {
-        anyhow::anyhow!(
-            "unsupported photo format: {}",
-            local_path.display()
-        )
-    })?;
+    let mime = photos_mime_type(local_path)
+        .ok_or_else(|| anyhow::anyhow!("unsupported photo format: {}", local_path.display()))?;
 
     let content = tokio::fs::read(local_path)
         .await
@@ -198,9 +192,7 @@ pub fn photos_mime_type(path: &Path) -> Option<String> {
         "heif" => return Some("image/heif".into()),
         // RAW formats — treat as generic application/octet-stream but still
         // support them (Photos accepts them).
-        "raw" | "cr2" | "nef" | "arw" | "dng" => {
-            return Some("application/octet-stream".into())
-        }
+        "raw" | "cr2" | "nef" | "arw" | "dng" => return Some("application/octet-stream".into()),
         _ => {}
     }
 
@@ -226,9 +218,12 @@ pub fn photos_mime_type(path: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use wiremock::{
+        matchers::{header, method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
     use super::*;
-    use wiremock::matchers::{header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_client(token: &str) -> DriveClient {
         DriveClient::new(token)
@@ -242,10 +237,10 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/v1/uploads"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                "CAISiQIKJQ...upload-token-value",
-                "text/plain",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw("CAISiQIKJQ...upload-token-value", "text/plain"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -253,7 +248,11 @@ mod tests {
         let url = format!("{}/v1/uploads", server.uri());
         let client = test_client("tok");
         let resp = client
-            .post_raw(&url, b"fake-image-data".to_vec(), "application/octet-stream")
+            .post_raw(
+                &url,
+                b"fake-image-data".to_vec(),
+                "application/octet-stream",
+            )
             .await
             .unwrap();
 
@@ -291,10 +290,10 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/v1/mediaItems:batchCreate"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                r#"{"newMediaItemResults":[]}"#,
-                "application/json",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"newMediaItemResults":[]}"#, "application/json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -315,10 +314,10 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/v1/mediaItems:batchCreate"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                r#"{"newMediaItemResults":[]}"#,
-                "application/json",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"newMediaItemResults":[]}"#, "application/json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -420,7 +419,10 @@ mod tests {
 
         let result = &resp.new_media_item_results[0];
         assert_eq!(result.upload_token.as_deref(), Some("token-1"));
-        assert_eq!(result.status.as_ref().unwrap().message.as_deref(), Some("Success"));
+        assert_eq!(
+            result.status.as_ref().unwrap().message.as_deref(),
+            Some("Success")
+        );
         assert_eq!(result.status.as_ref().unwrap().code, Some(0));
 
         let item = result.media_item.as_ref().unwrap();
@@ -450,7 +452,10 @@ mod tests {
         let resp: BatchCreateResponse = serde_json::from_str(json).unwrap();
         let result = &resp.new_media_item_results[0];
         assert_eq!(result.status.as_ref().unwrap().code, Some(3));
-        assert!(result.media_item.is_none(), "error results have no mediaItem");
+        assert!(
+            result.media_item.is_none(),
+            "error results have no mediaItem"
+        );
     }
 
     #[test]
@@ -484,8 +489,24 @@ mod tests {
 
         let resp: BatchCreateResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.new_media_item_results.len(), 2);
-        assert_eq!(resp.new_media_item_results[0].media_item.as_ref().unwrap().id.as_deref(), Some("id-1"));
-        assert_eq!(resp.new_media_item_results[1].media_item.as_ref().unwrap().id.as_deref(), Some("id-2"));
+        assert_eq!(
+            resp.new_media_item_results[0]
+                .media_item
+                .as_ref()
+                .unwrap()
+                .id
+                .as_deref(),
+            Some("id-1")
+        );
+        assert_eq!(
+            resp.new_media_item_results[1]
+                .media_item
+                .as_ref()
+                .unwrap()
+                .id
+                .as_deref(),
+            Some("id-2")
+        );
     }
 
     #[test]
@@ -516,34 +537,94 @@ mod tests {
 
     #[test]
     fn supported_image_formats() {
-        assert_eq!(photos_mime_type(Path::new("photo.jpg")), Some("image/jpeg".into()));
-        assert_eq!(photos_mime_type(Path::new("photo.jpeg")), Some("image/jpeg".into()));
-        assert_eq!(photos_mime_type(Path::new("image.png")), Some("image/png".into()));
-        assert_eq!(photos_mime_type(Path::new("anim.gif")), Some("image/gif".into()));
-        assert_eq!(photos_mime_type(Path::new("pic.webp")), Some("image/webp".into()));
-        assert_eq!(photos_mime_type(Path::new("photo.heic")), Some("image/heic".into()));
-        assert_eq!(photos_mime_type(Path::new("photo.heif")), Some("image/heif".into()));
-        assert_eq!(photos_mime_type(Path::new("scan.bmp")), Some("image/bmp".into()));
-        assert_eq!(photos_mime_type(Path::new("doc.tiff")), Some("image/tiff".into()));
-        assert_eq!(photos_mime_type(Path::new("doc.tif")), Some("image/tiff".into()));
+        assert_eq!(
+            photos_mime_type(Path::new("photo.jpg")),
+            Some("image/jpeg".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("photo.jpeg")),
+            Some("image/jpeg".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("image.png")),
+            Some("image/png".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("anim.gif")),
+            Some("image/gif".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("pic.webp")),
+            Some("image/webp".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("photo.heic")),
+            Some("image/heic".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("photo.heif")),
+            Some("image/heif".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("scan.bmp")),
+            Some("image/bmp".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("doc.tiff")),
+            Some("image/tiff".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("doc.tif")),
+            Some("image/tiff".into())
+        );
     }
 
     #[test]
     fn supported_video_formats() {
-        assert_eq!(photos_mime_type(Path::new("clip.mp4")), Some("video/mp4".into()));
-        assert_eq!(photos_mime_type(Path::new("clip.mov")), Some("video/quicktime".into()));
-        assert_eq!(photos_mime_type(Path::new("clip.avi")), Some("video/x-msvideo".into()));
-        assert_eq!(photos_mime_type(Path::new("clip.mkv")), Some("video/x-matroska".into()));
-        assert_eq!(photos_mime_type(Path::new("clip.webm")), Some("video/webm".into()));
-        assert_eq!(photos_mime_type(Path::new("clip.3gp")), Some("video/3gpp".into()));
+        assert_eq!(
+            photos_mime_type(Path::new("clip.mp4")),
+            Some("video/mp4".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("clip.mov")),
+            Some("video/quicktime".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("clip.avi")),
+            Some("video/x-msvideo".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("clip.mkv")),
+            Some("video/x-matroska".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("clip.webm")),
+            Some("video/webm".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("clip.3gp")),
+            Some("video/3gpp".into())
+        );
     }
 
     #[test]
     fn raw_formats_supported() {
-        assert_eq!(photos_mime_type(Path::new("raw.cr2")), Some("application/octet-stream".into()));
-        assert_eq!(photos_mime_type(Path::new("raw.nef")), Some("application/octet-stream".into()));
-        assert_eq!(photos_mime_type(Path::new("raw.arw")), Some("application/octet-stream".into()));
-        assert_eq!(photos_mime_type(Path::new("raw.dng")), Some("application/octet-stream".into()));
+        assert_eq!(
+            photos_mime_type(Path::new("raw.cr2")),
+            Some("application/octet-stream".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("raw.nef")),
+            Some("application/octet-stream".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("raw.arw")),
+            Some("application/octet-stream".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("raw.dng")),
+            Some("application/octet-stream".into())
+        );
     }
 
     #[test]
@@ -565,9 +646,18 @@ mod tests {
 
     #[test]
     fn case_insensitive_extension_matching() {
-        assert_eq!(photos_mime_type(Path::new("PHOTO.JPG")), Some("image/jpeg".into()));
-        assert_eq!(photos_mime_type(Path::new("clip.MP4")), Some("video/mp4".into()));
-        assert_eq!(photos_mime_type(Path::new("image.Png")), Some("image/png".into()));
+        assert_eq!(
+            photos_mime_type(Path::new("PHOTO.JPG")),
+            Some("image/jpeg".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("clip.MP4")),
+            Some("video/mp4".into())
+        );
+        assert_eq!(
+            photos_mime_type(Path::new("image.Png")),
+            Some("image/png".into())
+        );
     }
 
     // ── upload_media_item_from_path ───────────────────────────────────────
@@ -578,10 +668,9 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/v1/uploads"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                "path-upload-token",
-                "text/plain",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw("path-upload-token", "text/plain"),
+            )
             .expect(1)
             .mount(&server)
             .await;

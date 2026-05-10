@@ -1,6 +1,5 @@
-use sqlx::SqlitePool;
-
 use gdriver_ipc::Account;
+use sqlx::SqlitePool;
 
 // ─── Internal row type ────────────────────────────────────────────────────────
 
@@ -112,8 +111,9 @@ pub async fn delete_account(pool: &SqlitePool, id: &str) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     /// Open an in-memory SQLite pool and run migrations.
     async fn test_pool() -> SqlitePool {
@@ -190,8 +190,14 @@ mod tests {
     async fn list_accounts_ordered() {
         let pool = test_pool().await;
 
-        let older = Account { last_used_at: 1_000, ..make_account("uid-3", "old@example.com") };
-        let newer = Account { last_used_at: 2_000, ..make_account("uid-4", "new@example.com") };
+        let older = Account {
+            last_used_at: 1_000,
+            ..make_account("uid-3", "old@example.com")
+        };
+        let newer = Account {
+            last_used_at: 2_000,
+            ..make_account("uid-4", "new@example.com")
+        };
         insert_account(&pool, &older).await.unwrap();
         insert_account(&pool, &newer).await.unwrap();
 

@@ -116,15 +116,13 @@ pub async fn update_task_status(
 ) -> anyhow::Result<()> {
     let now = chrono::Utc::now().timestamp_millis();
 
-    sqlx::query(
-        "UPDATE sync_queue SET status = ?, error_msg = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(status)
-    .bind(error_msg)
-    .bind(now)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE sync_queue SET status = ?, error_msg = ?, updated_at = ? WHERE id = ?")
+        .bind(status)
+        .bind(error_msg)
+        .bind(now)
+        .bind(id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -157,9 +155,7 @@ pub async fn update_task_retry(
 /// Return all tasks that are currently `in_progress`.  Used at startup to
 /// recover tasks that were running when the daemon was killed.
 #[allow(dead_code)]
-pub async fn get_in_progress_tasks(
-    pool: &SqlitePool,
-) -> anyhow::Result<Vec<SyncTask>> {
+pub async fn get_in_progress_tasks(pool: &SqlitePool) -> anyhow::Result<Vec<SyncTask>> {
     let rows = sqlx::query_as::<_, SyncTaskRow>(
         "SELECT id, account_id, file_id, operation, local_path, priority,
                 status, retry_count, error_msg, created_at, updated_at
@@ -193,9 +189,12 @@ pub async fn reset_in_progress_to_pending(pool: &SqlitePool) -> anyhow::Result<u
 
 #[cfg(test)]
 mod tests {
+    use sqlx::{
+        sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+        Row,
+    };
+
     use super::*;
-    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-    use sqlx::Row;
 
     async fn test_pool() -> SqlitePool {
         let opts = SqliteConnectOptions::new()
@@ -293,9 +292,15 @@ mod tests {
         let pool = test_pool().await;
 
         // Insert tasks with different priorities
-        enqueue(&pool, &make_task("upload", 5, "pending")).await.unwrap();
-        enqueue(&pool, &make_task("download", 1, "pending")).await.unwrap(); // highest prio
-        enqueue(&pool, &make_task("delete", 10, "pending")).await.unwrap();
+        enqueue(&pool, &make_task("upload", 5, "pending"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("download", 1, "pending"))
+            .await
+            .unwrap(); // highest prio
+        enqueue(&pool, &make_task("delete", 10, "pending"))
+            .await
+            .unwrap();
 
         let next = next_pending_task(&pool).await.unwrap().unwrap();
         assert_eq!(next.priority, 1);
@@ -323,9 +328,15 @@ mod tests {
     async fn next_pending_skips_non_pending() {
         let pool = test_pool().await;
 
-        enqueue(&pool, &make_task("upload", 1, "in_progress")).await.unwrap();
-        enqueue(&pool, &make_task("download", 1, "completed")).await.unwrap();
-        enqueue(&pool, &make_task("delete", 1, "failed")).await.unwrap();
+        enqueue(&pool, &make_task("upload", 1, "in_progress"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("download", 1, "completed"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("delete", 1, "failed"))
+            .await
+            .unwrap();
 
         let next = next_pending_task(&pool).await.unwrap();
         assert!(next.is_none());
@@ -381,7 +392,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(row.get::<String, _>(0), "failed");
-        assert_eq!(row.get::<Option<String>, _>(1).as_deref(), Some("network error"));
+        assert_eq!(
+            row.get::<Option<String>, _>(1).as_deref(),
+            Some("network error")
+        );
     }
 
     // ── update_task_retry ─────────────────────────────────────────────────
@@ -415,9 +429,15 @@ mod tests {
     async fn get_in_progress_returns_only_running_tasks() {
         let pool = test_pool().await;
 
-        enqueue(&pool, &make_task("upload", 1, "in_progress")).await.unwrap();
-        enqueue(&pool, &make_task("download", 2, "in_progress")).await.unwrap();
-        enqueue(&pool, &make_task("delete", 3, "pending")).await.unwrap();
+        enqueue(&pool, &make_task("upload", 1, "in_progress"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("download", 2, "in_progress"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("delete", 3, "pending"))
+            .await
+            .unwrap();
 
         let in_progress = get_in_progress_tasks(&pool).await.unwrap();
         assert_eq!(in_progress.len(), 2);
@@ -428,8 +448,12 @@ mod tests {
     async fn get_in_progress_empty_when_none_running() {
         let pool = test_pool().await;
 
-        enqueue(&pool, &make_task("upload", 1, "pending")).await.unwrap();
-        enqueue(&pool, &make_task("download", 2, "completed")).await.unwrap();
+        enqueue(&pool, &make_task("upload", 1, "pending"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("download", 2, "completed"))
+            .await
+            .unwrap();
 
         let in_progress = get_in_progress_tasks(&pool).await.unwrap();
         assert!(in_progress.is_empty());
@@ -441,9 +465,15 @@ mod tests {
     async fn reset_in_progress_moves_all_to_pending() {
         let pool = test_pool().await;
 
-        enqueue(&pool, &make_task("upload", 1, "in_progress")).await.unwrap();
-        enqueue(&pool, &make_task("download", 2, "in_progress")).await.unwrap();
-        enqueue(&pool, &make_task("delete", 3, "pending")).await.unwrap();
+        enqueue(&pool, &make_task("upload", 1, "in_progress"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("download", 2, "in_progress"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("delete", 3, "pending"))
+            .await
+            .unwrap();
 
         let affected = reset_in_progress_to_pending(&pool).await.unwrap();
         assert_eq!(affected, 2);
@@ -462,8 +492,12 @@ mod tests {
     async fn reset_in_progress_noop_when_none() {
         let pool = test_pool().await;
 
-        enqueue(&pool, &make_task("upload", 1, "pending")).await.unwrap();
-        enqueue(&pool, &make_task("download", 2, "completed")).await.unwrap();
+        enqueue(&pool, &make_task("upload", 1, "pending"))
+            .await
+            .unwrap();
+        enqueue(&pool, &make_task("download", 2, "completed"))
+            .await
+            .unwrap();
 
         let affected = reset_in_progress_to_pending(&pool).await.unwrap();
         assert_eq!(affected, 0);

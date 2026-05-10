@@ -1,9 +1,10 @@
-use std::sync::Arc;
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Listener, Manager};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
+    AppHandle, Listener, Manager,
+};
 use tokio::sync::RwLock;
 
 use crate::daemon_client::DaemonState;
@@ -34,15 +35,11 @@ impl TrayStatus {
 // ─── Setup entry point ───────────────────────────────────────────────────────
 
 /// Build the system tray icon with context menu and event handlers.
-pub fn setup_tray(
-    app: &AppHandle,
-    daemon: DaemonState,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn setup_tray(app: &AppHandle, daemon: DaemonState) -> Result<(), Box<dyn std::error::Error>> {
     // ── Menu ──────────────────────────────────────────────────────────────
     let open_item = MenuItem::with_id(app, "open", "Open gDriver", true, None::<&str>)?;
     let pause_item = MenuItem::with_id(app, "toggle_pause", "Pause Sync", true, None::<&str>)?;
-    let drive_item =
-        MenuItem::with_id(app, "open_drive", "Open Drive folder", true, None::<&str>)?;
+    let drive_item = MenuItem::with_id(app, "open_drive", "Open Drive folder", true, None::<&str>)?;
     let prefs_item = MenuItem::with_id(app, "preferences", "Preferences", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
@@ -201,7 +198,10 @@ async fn toggle_pause_sync(daemon: &DaemonState, pause_item: &MenuItem<tauri::Wr
         let guard = daemon.0.read().await;
         match &*guard {
             Some(client) => {
-                let val = client.call("sync.get_status", None).await.unwrap_or_default();
+                let val = client
+                    .call("sync.get_status", None)
+                    .await
+                    .unwrap_or_default();
                 val.get("status").and_then(|s| s.as_str()) == Some("paused")
             }
             None => false,
@@ -209,11 +209,19 @@ async fn toggle_pause_sync(daemon: &DaemonState, pause_item: &MenuItem<tauri::Wr
     };
 
     if let Some(client) = &*daemon.0.read().await {
-        let method = if is_paused { "sync.resume" } else { "sync.pause" };
+        let method = if is_paused {
+            "sync.resume"
+        } else {
+            "sync.pause"
+        };
         let _ = client.call(method, None).await;
     }
 
-    let label = if is_paused { "Pause Sync" } else { "Resume Sync" };
+    let label = if is_paused {
+        "Pause Sync"
+    } else {
+        "Resume Sync"
+    };
     let _ = pause_item.set_text(label);
 }
 
@@ -241,4 +249,3 @@ fn open_path(path: &str) -> Result<(), String> {
     }
     Ok(())
 }
-

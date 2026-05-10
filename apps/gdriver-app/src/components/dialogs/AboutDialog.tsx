@@ -45,8 +45,6 @@ export default function AboutDialog() {
     }
   };
 
-  const currentYear = new Date().getFullYear();
-
   return (
     <Dialog open={isOpen} onClose={handleClose} className="w-[400px]">
       <DialogHeader onClose={handleClose}>

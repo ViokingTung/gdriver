@@ -1,7 +1,8 @@
 // macOS platform integration: LaunchAgent auto-start and Notification Center.
 
-use anyhow::{Context, Result};
 use std::path::PathBuf;
+
+use anyhow::{Context, Result};
 use tracing::{info, warn};
 
 // ─── Auto-start via LaunchAgent ──────────────────────────────────────────────
@@ -81,10 +82,7 @@ pub fn set_launch_on_login() -> Result<()> {
     let load_result = std::process::Command::new("sh")
         .args([
             "-c",
-            &format!(
-                "launchctl bootstrap gui/$(id -u) {}",
-                plist_path.display(),
-            ),
+            &format!("launchctl bootstrap gui/$(id -u) {}", plist_path.display(),),
         ])
         .output();
 
@@ -100,9 +98,7 @@ pub fn set_launch_on_login() -> Result<()> {
             );
         }
         Err(e) => {
-            warn!(
-                "LaunchAgent written but launchctl not found (non-GUI session?): {e}"
-            );
+            warn!("LaunchAgent written but launchctl not found (non-GUI session?): {e}");
         }
     }
 
@@ -118,10 +114,7 @@ pub fn remove_launch_on_login() -> Result<()> {
         let unload_result = std::process::Command::new("sh")
             .args([
                 "-c",
-                &format!(
-                    "launchctl bootout gui/$(id -u) {}",
-                    plist_path.display(),
-                ),
+                &format!("launchctl bootout gui/$(id -u) {}", plist_path.display(),),
             ])
             .output();
 

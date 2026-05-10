@@ -8,9 +8,18 @@ pub const MAX_RETRIES: i32 = 3;
 /// File extensions for Google Workspace documents that must be exported
 /// rather than downloaded directly.
 pub const WORKSPACE_EXPORT_FORMATS: &[(&str, &str)] = &[
-    ("application/vnd.google-apps.document", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-    ("application/vnd.google-apps.spreadsheet", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-    ("application/vnd.google-apps.presentation", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    (
+        "application/vnd.google-apps.document",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ),
+    (
+        "application/vnd.google-apps.spreadsheet",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ),
+    (
+        "application/vnd.google-apps.presentation",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ),
     ("application/vnd.google-apps.drawing", "image/png"),
 ];
 
@@ -99,9 +108,7 @@ mod tests {
 
     #[test]
     fn google_drawing_is_workspace() {
-        assert!(is_workspace_document(
-            "application/vnd.google-apps.drawing"
-        ));
+        assert!(is_workspace_document("application/vnd.google-apps.drawing"));
     }
 
     #[test]

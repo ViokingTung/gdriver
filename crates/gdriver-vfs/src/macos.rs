@@ -15,13 +15,6 @@
 // The daemon attempts FileProvider first. If the XPC service fails to
 // register (e.g. missing entitlements), it falls back to FUSE-T.
 
-use async_trait::async_trait;
-use tracing::{info, warn};
-
-use crate::backend::{VfsBackend, VfsContext, VfsHandle};
-
-#[cfg(feature = "fuse")]
-use crate::db;
 #[cfg(feature = "fuse")]
 use std::collections::HashMap;
 #[cfg(feature = "fuse")]
@@ -34,6 +27,13 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 #[cfg(feature = "fuse")]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use async_trait::async_trait;
+use tracing::{info, warn};
+
+use crate::backend::{VfsBackend, VfsContext, VfsHandle};
+#[cfg(feature = "fuse")]
+use crate::db;
 
 // ─── Time-to-live constants ────────────────────────────────────────────────
 
@@ -119,12 +119,11 @@ impl GDriverFS {
         let mtime = UNIX_EPOCH + Duration::from_millis(meta.modified_time as u64);
         let now = SystemTime::now();
 
-        let (kind, perm, size, nlink) =
-            if meta.mime_type == "application/vnd.google-apps.folder" {
-                (fuser::FileType::Directory, 0o755, 0, 2)
-            } else {
-                (fuser::FileType::RegularFile, 0o644, meta.size as u64, 1)
-            };
+        let (kind, perm, size, nlink) = if meta.mime_type == "application/vnd.google-apps.folder" {
+            (fuser::FileType::Directory, 0o755, 0, 2)
+        } else {
+            (fuser::FileType::RegularFile, 0o644, meta.size as u64, 1)
+        };
 
         fuser::FileAttr {
             ino: meta.inode,
@@ -212,7 +211,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         let result = self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         ));
 
         match result {
@@ -233,12 +234,7 @@ impl fuser::Filesystem for GDriverFS {
         }
     }
 
-    fn getattr(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        reply: fuser::ReplyAttr,
-    ) {
+    fn getattr(&mut self, _req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
         if ino == db::ROOT_INODE {
             reply.attr(&DIR_TTL, &Self::root_attr());
             return;
@@ -309,13 +305,7 @@ impl fuser::Filesystem for GDriverFS {
         reply.ok();
     }
 
-    fn open(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        flags: i32,
-        reply: fuser::ReplyOpen,
-    ) {
+    fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
         if ino == db::ROOT_INODE {
             reply.error(libc::EISDIR);
             return;
@@ -352,7 +342,14 @@ impl fuser::Filesystem for GDriverFS {
 
         let fh = self.next_fh;
         self.next_fh += 1;
-        self.open_files.insert(fh, OpenHandle { ino, flags, local_path });
+        self.open_files.insert(
+            fh,
+            OpenHandle {
+                ino,
+                flags,
+                local_path,
+            },
+        );
 
         reply.opened(fh, 0);
     }
@@ -445,7 +442,10 @@ impl fuser::Filesystem for GDriverFS {
         let mut file = match fs::File::open(&local_path) {
             Ok(f) => f,
             Err(e) => {
-                tracing::error!("read({ino}): failed to open {}: {e:#}", local_path.display());
+                tracing::error!(
+                    "read({ino}): failed to open {}: {e:#}",
+                    local_path.display()
+                );
                 reply.error(libc::EIO);
                 return;
             }
@@ -555,14 +555,24 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         if let Err(e) = fs::File::create(&local_path) {
-            tracing::error!("create: failed to create file {}: {e:#}", local_path.display());
+            tracing::error!(
+                "create: failed to create file {}: {e:#}",
+                local_path.display()
+            );
             reply.error(libc::EIO);
             return;
         }
 
         let fh = self.next_fh;
         self.next_fh += 1;
-        self.open_files.insert(fh, OpenHandle { ino, flags, local_path });
+        self.open_files.insert(
+            fh,
+            OpenHandle {
+                ino,
+                flags,
+                local_path,
+            },
+        );
 
         let now = SystemTime::now();
         let attr = fuser::FileAttr {
@@ -634,7 +644,10 @@ impl fuser::Filesystem for GDriverFS {
                     .as_millis() as i64;
 
                 let _ = self.block_on(db::update_file_size_mtime(
-                    &self.ctx.db, ino, new_end, now_ms,
+                    &self.ctx.db,
+                    ino,
+                    new_end,
+                    now_ms,
                 ));
 
                 reply.written(n as u32);
@@ -742,7 +755,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         let meta = match self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -812,7 +827,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         let meta = match self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -827,7 +844,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         if let Ok(Some(_)) = self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, newparent, &new_name_str,
+            &self.ctx.db,
+            newparent,
+            &new_name_str,
         )) {
             reply.error(libc::EEXIST);
             return;
@@ -899,7 +918,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         if let Ok(Some(_)) = self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             reply.error(libc::EEXIST);
             return;
@@ -999,7 +1020,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         let meta = match self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -1329,8 +1352,7 @@ async fn mount_fileprovider(_ctx: VfsContext) -> anyhow::Result<VfsHandle> {
 #[cfg(feature = "fuse")]
 async fn mount_fuse_t(ctx: VfsContext) -> anyhow::Result<VfsHandle> {
     // Verify the FUSE device exists (kernel extension must be loaded).
-    if !std::path::Path::new("/dev/macfuse").exists()
-        && !std::path::Path::new("/dev/fuse").exists()
+    if !std::path::Path::new("/dev/macfuse").exists() && !std::path::Path::new("/dev/fuse").exists()
     {
         anyhow::bail!(
             "FUSE device not found — macFUSE kernel extension is not loaded. \
@@ -1353,17 +1375,13 @@ async fn mount_fuse_t(ctx: VfsContext) -> anyhow::Result<VfsHandle> {
     info!("mounting FUSE-T filesystem at {}", mount_point.display());
 
     let mount_point_clone = mount_point.clone();
-    let session = tokio::task::spawn_blocking(move || {
-        fuser::spawn_mount2(fs, &mount_point_clone, &options)
-    })
-    .await
-    .map_err(|e| anyhow::anyhow!("FUSE-T spawn task panicked: {e}"))?
-    .map_err(|e| {
-        anyhow::anyhow!(
-            "failed to mount FUSE-T at {}: {e}",
-            mount_point.display()
-        )
-    })?;
+    let session =
+        tokio::task::spawn_blocking(move || fuser::spawn_mount2(fs, &mount_point_clone, &options))
+            .await
+            .map_err(|e| anyhow::anyhow!("FUSE-T spawn task panicked: {e}"))?
+            .map_err(|e| {
+                anyhow::anyhow!("failed to mount FUSE-T at {}: {e}", mount_point.display())
+            })?;
 
     info!("FUSE-T filesystem mounted at {}", mount_point.display());
     Ok(VfsHandle::new_macos_fuse(session, mount_point))

@@ -22,8 +22,7 @@ const DEFAULT_FILE_FIELDS: &str =
      trashed,shared,md5Checksum,webViewLink),nextPageToken,incompleteSearch";
 
 /// Fields requested for a single-file response.
-const SINGLE_FILE_FIELDS: &str =
-    "id,name,mimeType,parents,size,version,modifiedTime,createdTime,\
+const SINGLE_FILE_FIELDS: &str = "id,name,mimeType,parents,size,version,modifiedTime,createdTime,\
      trashed,shared,md5Checksum,webViewLink";
 
 // ─── File resource ───────────────────────────────────────────────────────
@@ -214,7 +213,10 @@ pub async fn files_create(
     client: &DriveClient,
     metadata: &CreateFileMetadata,
 ) -> anyhow::Result<DriveFile> {
-    let url = format!("{DRIVE_API_BASE}/files?fields={}", urlencoding(SINGLE_FILE_FIELDS));
+    let url = format!(
+        "{DRIVE_API_BASE}/files?fields={}",
+        urlencoding(SINGLE_FILE_FIELDS)
+    );
     client.post_json(&url, metadata).await
 }
 
@@ -301,12 +303,10 @@ pub async fn files_upload_multipart(
     content_mime: &str,
 ) -> anyhow::Result<DriveFile> {
     let boundary = "gdriver_multipart_boundary";
-    let metadata_json = serde_json::to_string(metadata)
-        .context("failed to serialise upload metadata")?;
+    let metadata_json =
+        serde_json::to_string(metadata).context("failed to serialise upload metadata")?;
 
-    let mut body: Vec<u8> = Vec::with_capacity(
-        512 + metadata_json.len() + content.len(),
-    );
+    let mut body: Vec<u8> = Vec::with_capacity(512 + metadata_json.len() + content.len());
     // Metadata part
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
     body.extend_from_slice(b"Content-Type: application/json; charset=UTF-8\r\n\r\n");
@@ -314,9 +314,7 @@ pub async fn files_upload_multipart(
     body.extend_from_slice(b"\r\n");
     // Content part
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
-    body.extend_from_slice(
-        format!("Content-Type: {content_mime}\r\n\r\n").as_bytes(),
-    );
+    body.extend_from_slice(format!("Content-Type: {content_mime}\r\n\r\n").as_bytes());
     body.extend_from_slice(content);
     body.extend_from_slice(b"\r\n");
     // Closing boundary
@@ -329,7 +327,9 @@ pub async fn files_upload_multipart(
     );
 
     let resp = client.post_raw(&url, body, &content_type).await?;
-    resp.json().await.context("failed to deserialise multipart upload response")
+    resp.json()
+        .await
+        .context("failed to deserialise multipart upload response")
 }
 
 /// Start a resumable upload session.
@@ -340,8 +340,8 @@ pub async fn files_upload_resumable_start(
     client: &DriveClient,
     metadata: &CreateFileMetadata,
 ) -> anyhow::Result<String> {
-    let metadata_json = serde_json::to_vec(metadata)
-        .context("failed to serialise upload metadata")?;
+    let metadata_json =
+        serde_json::to_vec(metadata).context("failed to serialise upload metadata")?;
 
     let url = format!("{UPLOAD_API_BASE}/files?uploadType=resumable");
 
@@ -377,7 +377,9 @@ pub async fn files_upload_resumable_chunk(
     let mut headers = HashMap::new();
     headers.insert("Content-Range".into(), content_range);
 
-    let resp = client.put_raw_no_redirect(uri, data.to_vec(), &headers).await?;
+    let resp = client
+        .put_raw_no_redirect(uri, data.to_vec(), &headers)
+        .await?;
 
     match resp.status().as_u16() {
         200 | 201 => {
@@ -389,8 +391,7 @@ pub async fn files_upload_resumable_chunk(
         }
         308 => {
             // The server received the chunk but the upload is not yet complete.
-            let received = parse_range_header(&resp)
-                .unwrap_or(range_end + 1);
+            let received = parse_range_header(&resp).unwrap_or(range_end + 1);
             Ok(UploadChunkResult::Incomplete { received })
         }
         status => {
@@ -416,7 +417,9 @@ pub async fn files_upload_resumable_query(
     let mut headers = HashMap::new();
     headers.insert("Content-Range".into(), content_range);
 
-    let resp = client.put_raw_no_redirect(uri, Vec::new(), &headers).await?;
+    let resp = client
+        .put_raw_no_redirect(uri, Vec::new(), &headers)
+        .await?;
 
     match resp.status().as_u16() {
         200 | 201 => {
@@ -425,8 +428,7 @@ pub async fn files_upload_resumable_query(
             Ok((total, true))
         }
         308 => {
-            let received = parse_range_header(&resp)
-                .unwrap_or(0);
+            let received = parse_range_header(&resp).unwrap_or(0);
             Ok((received, false))
         }
         status => {
@@ -462,9 +464,25 @@ pub(crate) fn urlencoding(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
-            | b'-' | b'_' | b'.' | b'~' | b':' | b'/' | b',' | b'(' | b')'
-            | b'\'' | b'!' | b'*' | b'@' | b';' | b'=' | b'$' => result.push(b as char),
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b':'
+            | b'/'
+            | b','
+            | b'('
+            | b')'
+            | b'\''
+            | b'!'
+            | b'*'
+            | b'@'
+            | b';'
+            | b'='
+            | b'$' => result.push(b as char),
             b' ' => result.push_str("%20"),
             _ => {
                 result.push_str(&format!("%{:02X}", b));
@@ -488,9 +506,12 @@ pub fn parse_quota_number(s: &Option<String>) -> anyhow::Result<u64> {
 
 #[cfg(test)]
 mod tests {
+    use wiremock::{
+        matchers::{header, method, path, query_param},
+        Mock, MockServer, ResponseTemplate,
+    };
+
     use super::*;
-    use wiremock::matchers::{header, method, path, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     // ── helpers ──────────────────────────────────────────────────────────
 
@@ -554,12 +575,14 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/drive/v3/files"))
-            .and(query_param("q", "mimeType='application/vnd.google-apps.folder'"))
-            .and(query_param("pageSize", "10"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                r#"{"files":[]}"#,
-                "application/json",
+            .and(query_param(
+                "q",
+                "mimeType='application/vnd.google-apps.folder'",
             ))
+            .and(query_param("pageSize", "10"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(r#"{"files":[]}"#, "application/json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -593,8 +616,7 @@ mod tests {
 
     #[tokio::test]
     async fn files_list_empty() {
-        let resp: FileListResponse =
-            serde_json::from_str(r#"{"files":[]}"#).unwrap();
+        let resp: FileListResponse = serde_json::from_str(r#"{"files":[]}"#).unwrap();
         assert!(resp.files.is_empty());
         assert!(resp.next_page_token.is_none());
     }
@@ -608,7 +630,10 @@ mod tests {
 
         assert_eq!(f.id.as_deref(), Some("abc123"));
         assert_eq!(f.name.as_deref(), Some("report.pdf"));
-        assert_eq!(f.mime_type.as_deref(), Some("application/vnd.google-apps.folder"));
+        assert_eq!(
+            f.mime_type.as_deref(),
+            Some("application/vnd.google-apps.folder")
+        );
         assert_eq!(f.etag.as_deref(), Some("\"etag_abc123\""));
         assert_eq!(f.version.as_deref(), Some("42"));
         assert_eq!(f.trashed, Some(false));
@@ -649,7 +674,10 @@ mod tests {
             parents: None,
         };
         let json = serde_json::to_string(&meta).unwrap();
-        assert!(!json.contains("parents"), "parents key should be absent when None");
+        assert!(
+            !json.contains("parents"),
+            "parents key should be absent when None"
+        );
     }
 
     // ── files_update ─────────────────────────────────────────────────────
@@ -662,7 +690,10 @@ mod tests {
         };
         let json = serde_json::to_string(&meta).unwrap();
         assert!(json.contains("renamed.txt"));
-        assert!(!json.contains("mimeType"), "absent fields should be skipped");
+        assert!(
+            !json.contains("mimeType"),
+            "absent fields should be skipped"
+        );
         assert!(!json.contains("trashed"));
     }
 
@@ -785,7 +816,10 @@ mod tests {
         let json = sample_file_json("f99", "document.pdf");
         let f: DriveFile = serde_json::from_str(&json).unwrap();
         assert_eq!(f.id.as_deref(), Some("f99"));
-        assert_eq!(f.web_view_link.as_deref(), Some("https://drive.google.com/drive/folders/f99"));
+        assert_eq!(
+            f.web_view_link.as_deref(),
+            Some("https://drive.google.com/drive/folders/f99")
+        );
         assert!(f.shared == Some(false));
     }
 
@@ -883,10 +917,10 @@ mod tests {
             .and(path("/upload/drive/v3/files"))
             .and(query_param("uploadType", "multipart"))
             .and(query_param("fields", &fields_encoded))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("up1", "photo.jpg"),
-                "application/json",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(sample_file_json("up1", "photo.jpg"), "application/json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -951,13 +985,31 @@ mod tests {
         body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
 
         let body_str = String::from_utf8(body).unwrap();
-        assert!(body_str.contains("--gdriver_multipart_boundary"), "has boundary");
-        assert!(body_str.contains("Content-Type: application/json"), "has metadata part");
-        assert!(body_str.contains("\"name\":\"test.txt\""), "has file name in metadata");
-        assert!(body_str.contains("\"parents\":[\"parent123\"]"), "has parents in metadata");
-        assert!(body_str.contains("Content-Type: text/plain"), "has content part");
+        assert!(
+            body_str.contains("--gdriver_multipart_boundary"),
+            "has boundary"
+        );
+        assert!(
+            body_str.contains("Content-Type: application/json"),
+            "has metadata part"
+        );
+        assert!(
+            body_str.contains("\"name\":\"test.txt\""),
+            "has file name in metadata"
+        );
+        assert!(
+            body_str.contains("\"parents\":[\"parent123\"]"),
+            "has parents in metadata"
+        );
+        assert!(
+            body_str.contains("Content-Type: text/plain"),
+            "has content part"
+        );
         assert!(body_str.contains("hello"), "has content data");
-        assert!(body_str.ends_with("--gdriver_multipart_boundary--\r\n"), "ends with closing boundary");
+        assert!(
+            body_str.ends_with("--gdriver_multipart_boundary--\r\n"),
+            "ends with closing boundary"
+        );
     }
 
     // ── Upload: resumable start ────────────────────────────────────────────
@@ -971,15 +1023,15 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/upload/drive/v3/files"))
             .and(query_param("uploadType", "resumable"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .append_header("Location", &upload_uri),
-            )
+            .respond_with(ResponseTemplate::new(200).append_header("Location", &upload_uri))
             .expect(1)
             .mount(&server)
             .await;
 
-        let url = format!("{}/upload/drive/v3/files?uploadType=resumable", server.uri());
+        let url = format!(
+            "{}/upload/drive/v3/files?uploadType=resumable",
+            server.uri()
+        );
         let metadata = CreateFileMetadata {
             name: "bigfile.bin".into(),
             mime_type: "application/octet-stream".into(),
@@ -993,12 +1045,7 @@ mod tests {
             .await
             .unwrap();
 
-        let location = resp
-            .headers()
-            .get("Location")
-            .unwrap()
-            .to_str()
-            .unwrap();
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
         assert_eq!(location, upload_uri);
     }
 
@@ -1014,7 +1061,10 @@ mod tests {
             .mount(&server)
             .await;
 
-        let url = format!("{}/upload/drive/v3/files?uploadType=resumable", server.uri());
+        let url = format!(
+            "{}/upload/drive/v3/files?uploadType=resumable",
+            server.uri()
+        );
         let metadata = CreateFileMetadata {
             name: "bad.bin".into(),
             mime_type: "application/octet-stream".into(),
@@ -1030,7 +1080,10 @@ mod tests {
 
         // No Location header in response — the public function would error.
         let location = result.headers().get("Location");
-        assert!(location.is_none(), "response should have no Location header");
+        assert!(
+            location.is_none(),
+            "response should have no Location header"
+        );
     }
 
     // ── Upload: resumable chunk ────────────────────────────────────────────
@@ -1103,9 +1156,7 @@ mod tests {
 
         Mock::given(method("PUT"))
             .and(path("/resume/chunk-308"))
-            .respond_with(
-                ResponseTemplate::new(308).append_header("Range", "bytes=0-99"),
-            )
+            .respond_with(ResponseTemplate::new(308).append_header("Range", "bytes=0-99"))
             .expect(1)
             .mount(&server)
             .await;
@@ -1158,8 +1209,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(resp.status().as_u16(), 308);
-        assert!(resp.headers().get("Range").is_none(),
-            "no Range header → caller should use range_end + 1 as fallback");
+        assert!(
+            resp.headers().get("Range").is_none(),
+            "no Range header → caller should use range_end + 1 as fallback"
+        );
     }
 
     // ── Upload: resumable query ────────────────────────────────────────────
@@ -1197,9 +1250,7 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/resume/query-308"))
             .and(header("Content-Range", "bytes */1000"))
-            .respond_with(
-                ResponseTemplate::new(308).append_header("Range", "bytes=0-511"),
-            )
+            .respond_with(ResponseTemplate::new(308).append_header("Range", "bytes=0-511"))
             .expect(1)
             .mount(&server)
             .await;

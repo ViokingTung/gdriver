@@ -3,14 +3,16 @@
 //! Tests the composition of modules from gdriver-sync working together
 //! to simulate a complete file sync lifecycle.
 
-use gdriver_sync::conflict::{detect_conflict, conflict_copy_name, guess_mime};
-use gdriver_sync::downloader::{
-    is_workspace_document, workspace_export_mime, extension_for_export_mime,
-    temp_download_path, MAX_RETRIES as DL_MAX_RETRIES,
-};
-use gdriver_sync::uploader::{
-    is_valid_chunk_size, recommended_chunk_size, chunk_count, chunk_range,
-    CHUNK_SIZE, MIN_CHUNK_SIZE, RESUMABLE_THRESHOLD, MAX_RETRIES as UL_MAX_RETRIES,
+use gdriver_sync::{
+    conflict::{conflict_copy_name, detect_conflict, guess_mime},
+    downloader::{
+        extension_for_export_mime, is_workspace_document, temp_download_path,
+        workspace_export_mime, MAX_RETRIES as DL_MAX_RETRIES,
+    },
+    uploader::{
+        chunk_count, chunk_range, is_valid_chunk_size, recommended_chunk_size, CHUNK_SIZE,
+        MAX_RETRIES as UL_MAX_RETRIES, MIN_CHUNK_SIZE, RESUMABLE_THRESHOLD,
+    },
 };
 
 // ── Simulated sync lifecycle ───────────────────────────────────────────────
@@ -69,9 +71,16 @@ fn discover_all_workspace_types() {
     ];
 
     for (drive_mime, expected_ext) in workspace_types {
-        assert!(is_workspace_document(drive_mime), "{drive_mime} should be workspace");
+        assert!(
+            is_workspace_document(drive_mime),
+            "{drive_mime} should be workspace"
+        );
         let export = workspace_export_mime(drive_mime).unwrap();
-        assert_eq!(extension_for_export_mime(export), expected_ext, "extension for {drive_mime}");
+        assert_eq!(
+            extension_for_export_mime(export),
+            expected_ext,
+            "extension for {drive_mime}"
+        );
     }
 }
 
@@ -148,10 +157,10 @@ fn resumable_upload_thresholds_and_constants() {
 fn conflict_both_modified_since_last_sync() {
     // Local file modified after last sync AND remote etag changed
     let conflict = detect_conflict(
-        1700000000, // current_local_mtime_ms
-        Some(1699000000), // cached_local_mtime_ms
+        1700000000,           // current_local_mtime_ms
+        Some(1699000000),     // cached_local_mtime_ms
         Some("\"old-etag\""), // cached_remote_etag
-        "\"new-etag\"", // current_remote_etag
+        "\"new-etag\"",       // current_remote_etag
     );
     assert!(conflict, "both sides modified → conflict");
 }
@@ -160,12 +169,15 @@ fn conflict_both_modified_since_last_sync() {
 fn no_conflict_local_only_modified() {
     // Only local modified, remote unchanged
     let conflict = detect_conflict(
-        1700000000, // local is newer
+        1700000000,       // local is newer
         Some(1699000000), // stored is older
         Some("\"same-etag\""),
         "\"same-etag\"", // etag unchanged
     );
-    assert!(!conflict, "only local changed → not a conflict (just upload)");
+    assert!(
+        !conflict,
+        "only local changed → not a conflict (just upload)"
+    );
 }
 
 #[test]
@@ -177,7 +189,10 @@ fn no_conflict_remote_only_modified() {
         Some("\"old-etag\""),
         "\"new-etag\"", // remote changed
     );
-    assert!(!conflict, "only remote changed → not a conflict (just download)");
+    assert!(
+        !conflict,
+        "only remote changed → not a conflict (just download)"
+    );
 }
 
 #[test]
@@ -197,7 +212,7 @@ fn no_conflict_no_cached_etag() {
     let conflict = detect_conflict(
         1700000000,
         Some(1699000000),
-        None, // no cached etag
+        None,           // no cached etag
         "\"new-etag\"", // current etag exists
     );
     assert!(!conflict);
@@ -209,11 +224,14 @@ fn no_conflict_no_cached_mtime() {
     // New local file that was never synced → no conflict
     let conflict = detect_conflict(
         1700000000,
-        None, // no cached mtime (new file)
-        None, // no cached etag
+        None,              // no cached mtime (new file)
+        None,              // no cached etag
         "\"remote-etag\"", // file exists on remote
     );
-    assert!(!conflict, "no cached mtime → can't determine local changed → no conflict");
+    assert!(
+        !conflict,
+        "no cached mtime → can't determine local changed → no conflict"
+    );
 }
 
 #[test]
@@ -221,10 +239,7 @@ fn no_conflict_new_file_local_only() {
     // New local file, does not exist on remote
     // Without cached data, can't determine changes
     let conflict = detect_conflict(
-        1700000000,
-        None,
-        None,
-        "", // empty etag (file doesn't exist on remote)
+        1700000000, None, None, "", // empty etag (file doesn't exist on remote)
     );
     assert!(!conflict, "no cached data → cannot detect conflict");
 }
@@ -232,12 +247,7 @@ fn no_conflict_new_file_local_only() {
 #[test]
 fn conflict_one_ms_difference() {
     // One millisecond difference in local mtime with remote change
-    let conflict = detect_conflict(
-        1700000001,
-        Some(1700000000),
-        Some("\"old\""),
-        "\"new\"",
-    );
+    let conflict = detect_conflict(1700000001, Some(1700000000), Some("\"old\""), "\"new\"");
     assert!(conflict);
 }
 
@@ -277,7 +287,10 @@ fn conflict_copy_name_multiple_dots() {
 #[test]
 fn guess_mime_common_types() {
     assert_eq!(guess_mime(std::path::Path::new("file.txt")), "text/plain");
-    assert_eq!(guess_mime(std::path::Path::new("doc.pdf")), "application/pdf");
+    assert_eq!(
+        guess_mime(std::path::Path::new("doc.pdf")),
+        "application/pdf"
+    );
     assert_eq!(guess_mime(std::path::Path::new("img.png")), "image/png");
     assert_eq!(guess_mime(std::path::Path::new("img.jpg")), "image/jpeg");
     assert_eq!(guess_mime(std::path::Path::new("img.jpeg")), "image/jpeg");
@@ -310,7 +323,12 @@ fn simulate_full_sync_lifecycle() {
     // Files discovered from Drive API
     let remote_files = vec![
         ("file-1", "report.pdf", "application/pdf", "\"etag-a\""),
-        ("file-2", "budget.xlsx", "application/vnd.google-apps.spreadsheet", "\"etag-b\""),
+        (
+            "file-2",
+            "budget.xlsx",
+            "application/vnd.google-apps.spreadsheet",
+            "\"etag-b\"",
+        ),
         ("file-3", "photo.png", "image/png", "\"etag-c\""),
         ("file-4", "notes.txt", "text/plain", "\"etag-d\""),
     ];
@@ -347,10 +365,38 @@ fn simulate_conflict_detection_during_sync() {
 
     let files = vec![
         // (name, current_local_mtime, cached_mtime, cached_etag, current_etag, expect_conflict)
-        ("report.pdf", 1700000000_i64, Some(1699000000_i64), Some("\"a\""), "\"a\"", false),   // local modified only
-        ("data.csv",  1700000000_i64, Some(1699000000_i64), Some("\"b\""), "\"c\"", true),    // both modified
-        ("notes.txt", 1699000000_i64, Some(1699000000_i64), Some("\"d\""), "\"d\"", false),    // neither changed
-        ("remote.txt", 1699000000_i64, Some(1699000000_i64), Some("\"e\""), "\"f\"", false),   // remote only changed
+        (
+            "report.pdf",
+            1700000000_i64,
+            Some(1699000000_i64),
+            Some("\"a\""),
+            "\"a\"",
+            false,
+        ), // local modified only
+        (
+            "data.csv",
+            1700000000_i64,
+            Some(1699000000_i64),
+            Some("\"b\""),
+            "\"c\"",
+            true,
+        ), // both modified
+        (
+            "notes.txt",
+            1699000000_i64,
+            Some(1699000000_i64),
+            Some("\"d\""),
+            "\"d\"",
+            false,
+        ), // neither changed
+        (
+            "remote.txt",
+            1699000000_i64,
+            Some(1699000000_i64),
+            Some("\"e\""),
+            "\"f\"",
+            false,
+        ), // remote only changed
     ];
 
     let mut conflicts = Vec::new();

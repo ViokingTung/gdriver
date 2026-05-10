@@ -11,8 +11,7 @@ const DAEMON_NAME: &str = "gDriverDaemon";
 
 /// Get the current executable path as a string.
 fn current_exe_path() -> Result<String> {
-    let path = std::env::current_exe()
-        .context("Failed to get current executable path")?;
+    let path = std::env::current_exe().context("Failed to get current executable path")?;
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -22,15 +21,16 @@ fn current_exe_path() -> Result<String> {
 /// daemon starts automatically when the user logs in. This is a per-user
 /// setting and does not require administrator privileges.
 pub fn set_launch_on_login() -> Result<()> {
-    use winreg::enums::*;
-    use winreg::RegKey;
+    use winreg::{enums::*, RegKey};
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let (run_key, _) = hkcu.create_subkey(RUN_KEY)
+    let (run_key, _) = hkcu
+        .create_subkey(RUN_KEY)
         .context("Failed to open Run registry key")?;
 
     let exe_path = current_exe_path()?;
-    run_key.set_string(DAEMON_NAME, &exe_path)
+    run_key
+        .set_string(DAEMON_NAME, &exe_path)
         .context("Failed to set registry value")?;
 
     info!("Auto-start registered: {} -> {}", DAEMON_NAME, exe_path);
@@ -39,11 +39,11 @@ pub fn set_launch_on_login() -> Result<()> {
 
 /// Remove the daemon from auto-start on login.
 pub fn remove_launch_on_login() -> Result<()> {
-    use winreg::enums::*;
-    use winreg::RegKey;
+    use winreg::{enums::*, RegKey};
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let run_key = hkcu.open_subkey_with_flags(RUN_KEY, KEY_SET_VALUE)
+    let run_key = hkcu
+        .open_subkey_with_flags(RUN_KEY, KEY_SET_VALUE)
         .context("Failed to open Run registry key")?;
 
     match run_key.delete_value(DAEMON_NAME) {
@@ -60,8 +60,7 @@ pub fn remove_launch_on_login() -> Result<()> {
 
 /// Check if auto-start is currently enabled.
 pub fn is_launch_on_login_enabled() -> bool {
-    use winreg::enums::*;
-    use winreg::RegKey;
+    use winreg::{enums::*, RegKey};
 
     let hkcu = match RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(RUN_KEY, KEY_READ) {
         Ok(key) => key,
@@ -84,7 +83,10 @@ pub fn send_notification(title: &str, body: &str) -> Result<()> {
     match send_toast_notification(title, body) {
         Ok(()) => Ok(()),
         Err(e) => {
-            warn!("WinRT toast failed ({}), falling back to simple notification", e);
+            warn!(
+                "WinRT toast failed ({}), falling back to simple notification",
+                e
+            );
             send_simple_notification(title, body)
         }
     }
@@ -92,9 +94,11 @@ pub fn send_notification(title: &str, body: &str) -> Result<()> {
 
 /// WinRT ToastNotification implementation.
 fn send_toast_notification(title: &str, body: &str) -> Result<()> {
-    use windows::core::HSTRING;
-    use windows::Data::Xml::Dom::XmlDocument;
-    use windows::UI::Notifications::{ToastNotificationManager, ToastNotification};
+    use windows::{
+        core::HSTRING,
+        Data::Xml::Dom::XmlDocument,
+        UI::Notifications::{ToastNotification, ToastNotificationManager},
+    };
 
     let toast_xml = format!(
         r#"<toast>
@@ -122,8 +126,10 @@ fn send_toast_notification(title: &str, body: &str) -> Result<()> {
 
 /// Simple notification fallback using Win32 MessageBox.
 fn send_simple_notification(title: &str, body: &str) -> Result<()> {
-    use windows::Win32::UI::WindowsAndMessage::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
-    use windows::core::PCWSTR;
+    use windows::{
+        core::PCWSTR,
+        Win32::UI::WindowsAndMessage::{MessageBoxW, MB_ICONINFORMATION, MB_OK},
+    };
 
     let wide_title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     let wide_body: Vec<u16> = body.encode_utf16().chain(std::iter::once(0)).collect();

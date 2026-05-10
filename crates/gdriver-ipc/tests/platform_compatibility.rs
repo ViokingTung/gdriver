@@ -78,7 +78,13 @@ fn sync_control_methods_defined() {
 #[test]
 fn folder_management_methods_defined() {
     use gdriver_ipc::methods::*;
-    let methods = [FOLDER_ADD, FOLDER_REMOVE, FOLDER_LIST, FOLDER_GET_SIZE, FOLDER_GET_SUGGESTED];
+    let methods = [
+        FOLDER_ADD,
+        FOLDER_REMOVE,
+        FOLDER_LIST,
+        FOLDER_GET_SIZE,
+        FOLDER_GET_SUGGESTED,
+    ];
     for m in methods {
         assert!(!m.is_empty());
         assert!(m.starts_with("folder."), "{m} should start with 'folder.'");
@@ -91,7 +97,10 @@ fn offline_methods_defined() {
     let methods = [OFFLINE_GET_STATS, OFFLINE_CLEAR_CACHE];
     for m in methods {
         assert!(!m.is_empty());
-        assert!(m.starts_with("offline."), "{m} should start with 'offline.'");
+        assert!(
+            m.starts_with("offline."),
+            "{m} should start with 'offline.'"
+        );
     }
 }
 
@@ -153,7 +162,10 @@ fn notification_methods_defined() {
     ];
     for m in methods {
         assert!(!m.is_empty());
-        assert!(m.starts_with("notification."), "{m} should start with 'notification.'");
+        assert!(
+            m.starts_with("notification."),
+            "{m} should start with 'notification.'"
+        );
     }
 }
 
@@ -215,26 +227,56 @@ fn all_methods_use_snake_case_or_colon_events() {
     use gdriver_ipc::methods::*;
     let all = [
         PING,
-        SYNC_GET_STATUS, SYNC_PAUSE, SYNC_RESUME, SYNC_GET_RECENT_ITEMS,
-        SYNC_GET_ACTIVITY, SYNC_RETRY_ERROR, SYNC_GET_ERRORS,
-        FOLDER_ADD, FOLDER_REMOVE, FOLDER_LIST, FOLDER_GET_SIZE, FOLDER_GET_SUGGESTED,
-        OFFLINE_GET_STATS, OFFLINE_CLEAR_CACHE,
-        AUTH_START_FLOW, AUTH_GET_ACCOUNTS, AUTH_DISCONNECT, AUTH_GET_LOCALE, AUTH_GET_QUOTA,
-        PREFS_GET, PREFS_SAVE,
-        SYSTEM_OPEN_DRIVE_FOLDER, SYSTEM_OPEN_URL, SYSTEM_SUBMIT_FEEDBACK,
-        SYSTEM_GET_VERSION, SYSTEM_SET_SYNC_MODE, SYSTEM_GET_DRIVE_STATS,
-        SYSTEM_REVEAL_IN_FILE_MANAGER, SYSTEM_GET_PLATFORM, SYSTEM_QUIT,
+        SYNC_GET_STATUS,
+        SYNC_PAUSE,
+        SYNC_RESUME,
+        SYNC_GET_RECENT_ITEMS,
+        SYNC_GET_ACTIVITY,
+        SYNC_RETRY_ERROR,
+        SYNC_GET_ERRORS,
+        FOLDER_ADD,
+        FOLDER_REMOVE,
+        FOLDER_LIST,
+        FOLDER_GET_SIZE,
+        FOLDER_GET_SUGGESTED,
+        OFFLINE_GET_STATS,
+        OFFLINE_CLEAR_CACHE,
+        AUTH_START_FLOW,
+        AUTH_GET_ACCOUNTS,
+        AUTH_DISCONNECT,
+        AUTH_GET_LOCALE,
+        AUTH_GET_QUOTA,
+        PREFS_GET,
+        PREFS_SAVE,
+        SYSTEM_OPEN_DRIVE_FOLDER,
+        SYSTEM_OPEN_URL,
+        SYSTEM_SUBMIT_FEEDBACK,
+        SYSTEM_GET_VERSION,
+        SYSTEM_SET_SYNC_MODE,
+        SYSTEM_GET_DRIVE_STATS,
+        SYSTEM_REVEAL_IN_FILE_MANAGER,
+        SYSTEM_GET_PLATFORM,
+        SYSTEM_QUIT,
         SYSTEM_SET_LAUNCH_ON_LOGIN,
-        NOTIFICATION_LIST, NOTIFICATION_DISMISS, NOTIFICATION_MARK_READ,
+        NOTIFICATION_LIST,
+        NOTIFICATION_DISMISS,
+        NOTIFICATION_MARK_READ,
         NOTIFICATION_MARK_ALL_READ,
-        FS_GET_SYNC_STATE, FS_SET_OFFLINE, FS_GET_SHARE_LINK,
-        FP_GET_ITEM, FP_LIST_CHILDREN, FP_FETCH_CONTENTS, FP_CREATE_ITEM,
-        FP_MODIFY_ITEM, FP_DELETE_ITEM,
+        FS_GET_SYNC_STATE,
+        FS_SET_OFFLINE,
+        FS_GET_SHARE_LINK,
+        FP_GET_ITEM,
+        FP_LIST_CHILDREN,
+        FP_FETCH_CONTENTS,
+        FP_CREATE_ITEM,
+        FP_MODIFY_ITEM,
+        FP_DELETE_ITEM,
     ];
     for m in all {
         // Regular methods use dot-separated snake_case.
         assert!(
-            m.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '.'),
+            m.chars()
+                .all(|c| c.is_ascii_lowercase() || c == '_' || c == '.'),
             "method {m} should be lowercase with dots and underscores only"
         );
     }
@@ -247,26 +289,63 @@ fn ipc_method_count() {
     use gdriver_ipc::methods::*;
     let all_methods: &[&str] = &[
         PING,
-        SYNC_GET_STATUS, SYNC_PAUSE, SYNC_RESUME, SYNC_GET_RECENT_ITEMS,
-        SYNC_GET_ACTIVITY, SYNC_RETRY_ERROR, SYNC_GET_ERRORS,
-        FOLDER_ADD, FOLDER_REMOVE, FOLDER_LIST, FOLDER_GET_SIZE, FOLDER_GET_SUGGESTED,
-        OFFLINE_GET_STATS, OFFLINE_CLEAR_CACHE,
-        AUTH_START_FLOW, AUTH_GET_ACCOUNTS, AUTH_DISCONNECT, AUTH_GET_LOCALE, AUTH_GET_QUOTA,
-        PREFS_GET, PREFS_SAVE,
-        SYSTEM_OPEN_DRIVE_FOLDER, SYSTEM_OPEN_URL, SYSTEM_SUBMIT_FEEDBACK,
-        SYSTEM_GET_VERSION, SYSTEM_SET_SYNC_MODE, SYSTEM_GET_DRIVE_STATS,
-        SYSTEM_REVEAL_IN_FILE_MANAGER, SYSTEM_GET_PLATFORM, SYSTEM_QUIT,
+        SYNC_GET_STATUS,
+        SYNC_PAUSE,
+        SYNC_RESUME,
+        SYNC_GET_RECENT_ITEMS,
+        SYNC_GET_ACTIVITY,
+        SYNC_RETRY_ERROR,
+        SYNC_GET_ERRORS,
+        FOLDER_ADD,
+        FOLDER_REMOVE,
+        FOLDER_LIST,
+        FOLDER_GET_SIZE,
+        FOLDER_GET_SUGGESTED,
+        OFFLINE_GET_STATS,
+        OFFLINE_CLEAR_CACHE,
+        AUTH_START_FLOW,
+        AUTH_GET_ACCOUNTS,
+        AUTH_DISCONNECT,
+        AUTH_GET_LOCALE,
+        AUTH_GET_QUOTA,
+        PREFS_GET,
+        PREFS_SAVE,
+        SYSTEM_OPEN_DRIVE_FOLDER,
+        SYSTEM_OPEN_URL,
+        SYSTEM_SUBMIT_FEEDBACK,
+        SYSTEM_GET_VERSION,
+        SYSTEM_SET_SYNC_MODE,
+        SYSTEM_GET_DRIVE_STATS,
+        SYSTEM_REVEAL_IN_FILE_MANAGER,
+        SYSTEM_GET_PLATFORM,
+        SYSTEM_QUIT,
         SYSTEM_SET_LAUNCH_ON_LOGIN,
-        NOTIFICATION_LIST, NOTIFICATION_DISMISS, NOTIFICATION_MARK_READ,
+        NOTIFICATION_LIST,
+        NOTIFICATION_DISMISS,
+        NOTIFICATION_MARK_READ,
         NOTIFICATION_MARK_ALL_READ,
-        FS_GET_SYNC_STATE, FS_SET_OFFLINE, FS_GET_SHARE_LINK,
-        FP_GET_ITEM, FP_LIST_CHILDREN, FP_FETCH_CONTENTS, FP_CREATE_ITEM,
-        FP_MODIFY_ITEM, FP_DELETE_ITEM,
-        EVENT_SYNC_STATUS_CHANGED, EVENT_SYNC_ITEM_UPDATED, EVENT_SYNC_ERROR,
-        EVENT_NOTIFICATION_NEW, EVENT_ACCOUNT_CHANGED, EVENT_ACCOUNT_QUOTA_UPDATED,
+        FS_GET_SYNC_STATE,
+        FS_SET_OFFLINE,
+        FS_GET_SHARE_LINK,
+        FP_GET_ITEM,
+        FP_LIST_CHILDREN,
+        FP_FETCH_CONTENTS,
+        FP_CREATE_ITEM,
+        FP_MODIFY_ITEM,
+        FP_DELETE_ITEM,
+        EVENT_SYNC_STATUS_CHANGED,
+        EVENT_SYNC_ITEM_UPDATED,
+        EVENT_SYNC_ERROR,
+        EVENT_NOTIFICATION_NEW,
+        EVENT_ACCOUNT_CHANGED,
+        EVENT_ACCOUNT_QUOTA_UPDATED,
         EVENT_ONBOARDING_OAUTH_COMPLETE,
     ];
-    assert_eq!(all_methods.len(), 52, "unexpected method count — method added or removed?");
+    assert_eq!(
+        all_methods.len(),
+        52,
+        "unexpected method count — method added or removed?"
+    );
     // If this assertion fails because you intentionally added/removed a method:
     // update the count and verify the full list above is accurate.
 }

@@ -87,11 +87,11 @@ mod tests {
 
     #[test]
     fn valid_chunk_sizes() {
-        assert!(is_valid_chunk_size(256 * 1024));           // 256 KiB
-        assert!(is_valid_chunk_size(512 * 1024));           // 512 KiB
-        assert!(is_valid_chunk_size(1024 * 1024));          // 1 MiB
-        assert!(is_valid_chunk_size(5 * 1024 * 1024));      // 5 MiB
-        assert!(is_valid_chunk_size(256 * 1024 * 1024));    // 256 MiB
+        assert!(is_valid_chunk_size(256 * 1024)); // 256 KiB
+        assert!(is_valid_chunk_size(512 * 1024)); // 512 KiB
+        assert!(is_valid_chunk_size(1024 * 1024)); // 1 MiB
+        assert!(is_valid_chunk_size(5 * 1024 * 1024)); // 5 MiB
+        assert!(is_valid_chunk_size(256 * 1024 * 1024)); // 256 MiB
     }
 
     #[test]
@@ -99,9 +99,9 @@ mod tests {
         assert!(!is_valid_chunk_size(0));
         assert!(!is_valid_chunk_size(1));
         assert!(!is_valid_chunk_size(100));
-        assert!(!is_valid_chunk_size(256 * 1024 + 1));      // 256 KiB + 1
-        assert!(!is_valid_chunk_size(256 * 1024 - 1));      // 256 KiB - 1
-        assert!(!is_valid_chunk_size(1000 * 1024));         // not multiple of 256 KiB
+        assert!(!is_valid_chunk_size(256 * 1024 + 1)); // 256 KiB + 1
+        assert!(!is_valid_chunk_size(256 * 1024 - 1)); // 256 KiB - 1
+        assert!(!is_valid_chunk_size(1000 * 1024)); // not multiple of 256 KiB
     }
 
     // ── Recommended chunk size ─────────────────────────────────────────────
@@ -159,7 +159,10 @@ mod tests {
     #[test]
     fn chunk_range_first_chunk() {
         assert_eq!(chunk_range(0, 100, CHUNK_SIZE), Some((0, 99)));
-        assert_eq!(chunk_range(0, CHUNK_SIZE, CHUNK_SIZE), Some((0, CHUNK_SIZE - 1)));
+        assert_eq!(
+            chunk_range(0, CHUNK_SIZE, CHUNK_SIZE),
+            Some((0, CHUNK_SIZE - 1))
+        );
     }
 
     #[test]

@@ -97,10 +97,7 @@ impl VfsHandle {
 
     /// Create a new VFS handle for the macOS FileProvider backend (XPC).
     #[cfg(target_os = "macos")]
-    pub fn new_macos_fileprovider(
-        xpc: crate::macos::XpcService,
-        mount_point: PathBuf,
-    ) -> Self {
+    pub fn new_macos_fileprovider(xpc: crate::macos::XpcService, mount_point: PathBuf) -> Self {
         Self {
             inner: Some(crate::macos::VfsHandleInner::FileProvider(xpc)),
             mount_point,
@@ -124,7 +121,10 @@ impl Drop for VfsHandle {
         #[cfg(target_os = "linux")]
         {
             if let Some(session) = self.inner.take() {
-                tracing::info!("unmounting FUSE filesystem at {}", self.mount_point.display());
+                tracing::info!(
+                    "unmounting FUSE filesystem at {}",
+                    self.mount_point.display()
+                );
                 drop(session);
             }
         }
@@ -133,7 +133,10 @@ impl Drop for VfsHandle {
         #[cfg(target_os = "windows")]
         {
             if let Some(host) = self.inner.take() {
-                tracing::info!("unmounting WinFSP filesystem at {}", self.mount_point.display());
+                tracing::info!(
+                    "unmounting WinFSP filesystem at {}",
+                    self.mount_point.display()
+                );
                 drop(host);
             }
         }
@@ -149,7 +152,10 @@ impl Drop for VfsHandle {
                     }
                     #[cfg(feature = "fuse")]
                     crate::macos::VfsHandleInner::Fuse(session) => {
-                        tracing::info!("unmounting FUSE-T filesystem at {}", self.mount_point.display());
+                        tracing::info!(
+                            "unmounting FUSE-T filesystem at {}",
+                            self.mount_point.display()
+                        );
                         drop(session);
                     }
                 }

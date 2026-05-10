@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use serde::Serialize;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
-
 use gdriver_ipc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use serde::Serialize;
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    sync::broadcast,
+};
+use tracing::{debug, error, info, warn};
 
 use super::handlers::Router;
 

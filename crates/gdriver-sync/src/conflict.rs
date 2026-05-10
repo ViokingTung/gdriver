@@ -77,13 +77,9 @@ pub fn guess_mime(path: &Path) -> String {
         Some("zip") => "application/zip",
         Some("gz" | "tar") => "application/gzip",
         Some("doc") => "application/msword",
-        Some("docx") => {
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        }
+        Some("docx") => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         Some("xls") => "application/vnd.ms-excel",
-        Some("xlsx") => {
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        }
+        Some("xlsx") => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         _ => "application/octet-stream",
     }
     .to_string()
@@ -98,30 +94,30 @@ mod tests {
     #[test]
     fn no_conflict_when_local_unchanged() {
         assert!(!detect_conflict(
-            1_700_000_000_000,           // current local mtime
-            Some(1_700_000_000_000),     // cached local mtime (same → unchanged)
-            Some("\"etag-1\""),          // cached etag
-            "\"etag-2\"",                // current remote etag (changed)
+            1_700_000_000_000,       // current local mtime
+            Some(1_700_000_000_000), // cached local mtime (same → unchanged)
+            Some("\"etag-1\""),      // cached etag
+            "\"etag-2\"",            // current remote etag (changed)
         ));
     }
 
     #[test]
     fn no_conflict_when_remote_unchanged() {
         assert!(!detect_conflict(
-            1_700_000_001_000,           // local changed
+            1_700_000_001_000, // local changed
             Some(1_700_000_000_000),
-            Some("\"etag-1\""),          // cached etag
-            "\"etag-1\"",                // remote unchanged
+            Some("\"etag-1\""), // cached etag
+            "\"etag-1\"",       // remote unchanged
         ));
     }
 
     #[test]
     fn conflict_when_both_changed() {
         assert!(detect_conflict(
-            1_700_000_001_000,           // local changed
+            1_700_000_001_000, // local changed
             Some(1_700_000_000_000),
             Some("\"etag-1\""),
-            "\"etag-2\"",                // remote changed
+            "\"etag-2\"", // remote changed
         ));
     }
 
@@ -161,7 +157,7 @@ mod tests {
     fn no_conflict_when_local_older_than_cached() {
         // Local mtime is older than the cached one (clock skew or restore).
         assert!(!detect_conflict(
-            1_700_000_000_000,           // older than cached
+            1_700_000_000_000, // older than cached
             Some(1_700_000_001_000),
             Some("\"etag-1\""),
             "\"etag-2\"",
@@ -203,12 +199,7 @@ mod tests {
     #[test]
     fn conflict_with_zero_timestamps() {
         // Unix epoch.  Both changed from epoch → conflict.
-        assert!(detect_conflict(
-            1000,
-            Some(0),
-            Some("\"old\""),
-            "\"new\"",
-        ));
+        assert!(detect_conflict(1000, Some(0), Some("\"old\""), "\"new\"",));
     }
 
     #[test]
@@ -299,10 +290,7 @@ mod tests {
     fn conflict_copy_name_hidden_file() {
         let path = Path::new("/tmp/.gitignore");
         let name = conflict_copy_name(path, "2026-05-05 14:30:00");
-        assert_eq!(
-            name,
-            ".gitignore (conflict copy 2026-05-05 14:30:00)"
-        );
+        assert_eq!(name, ".gitignore (conflict copy 2026-05-05 14:30:00)");
     }
 
     #[test]
@@ -370,7 +358,10 @@ mod tests {
             guess_mime(Path::new("doc.docx")),
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
-        assert_eq!(guess_mime(Path::new("sheet.xls")), "application/vnd.ms-excel");
+        assert_eq!(
+            guess_mime(Path::new("sheet.xls")),
+            "application/vnd.ms-excel"
+        );
         assert_eq!(
             guess_mime(Path::new("sheet.xlsx")),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

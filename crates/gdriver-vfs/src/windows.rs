@@ -11,25 +11,31 @@
 //   - File names are Unicode (UTF-16) via `&OsStr`
 //   - The filesystem is mounted as a drive letter via `FileSystemHost`
 
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::fs;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs,
+    io::{Read, Seek, SeekFrom, Write},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use async_trait::async_trait;
 use tracing::{info, warn};
-use winfsp::error::{NTSTATUS, Result as WinResult};
-use winfsp::filesystem::{
-    FileInfo, FileSystem, FileSystemHost, OpenFileInfo, VolumeInfo,
-    FILE_ATTRIBUTE, SecurityDescriptor, FSP_FSCTL_VOLUME_PARAMS,
+use winfsp::{
+    error::{Result as WinResult, NTSTATUS},
+    filesystem::{
+        FileInfo, FileSystem, FileSystemHost, OpenFileInfo, SecurityDescriptor, VolumeInfo,
+        FILE_ATTRIBUTE, FSP_FSCTL_VOLUME_PARAMS,
+    },
+    interface::FileSystemContext,
 };
-use winfsp::interface::FileSystemContext;
 
-use crate::backend::{VfsBackend, VfsContext, VfsHandle};
-use crate::db;
+use crate::{
+    backend::{VfsBackend, VfsContext, VfsHandle},
+    db,
+};
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -229,7 +235,7 @@ impl FileSystemContext for WinFspVfs {
     fn get_volume_info(&self) -> WinResult<VolumeInfo> {
         Ok(VolumeInfo {
             total_size: 1024 * 1024 * 1024 * 1024, // 1 TB virtual
-            free_size: 512 * 1024 * 1024 * 1024,    // 512 GB virtual
+            free_size: 512 * 1024 * 1024 * 1024,   // 512 GB virtual
             volume_label: VOLUME_LABEL.to_string(),
         })
     }
@@ -326,14 +332,12 @@ impl FileSystemContext for WinFspVfs {
             });
         }
 
-        let details = match self.block_on(db::get_file_details_by_inode(
-            &self.ctx.db,
-            current_inode,
-        )) {
-            Ok(Some(d)) => d,
-            Ok(None) => return Err(NTSTATUS::STATUS_OBJECT_NAME_NOT_FOUND),
-            Err(_) => return Err(NTSTATUS::STATUS_INTERNAL_ERROR),
-        };
+        let details =
+            match self.block_on(db::get_file_details_by_inode(&self.ctx.db, current_inode)) {
+                Ok(Some(d)) => d,
+                Ok(None) => return Err(NTSTATUS::STATUS_OBJECT_NAME_NOT_FOUND),
+                Err(_) => return Err(NTSTATUS::STATUS_INTERNAL_ERROR),
+            };
 
         // Cannot open Google Workspace files directly
         if is_google_workspace_mime(&details.mime_type) {
@@ -388,13 +392,11 @@ impl FileSystemContext for WinFspVfs {
         marker: Option<&OsStr>,
         mut buffer: &mut [u8],
     ) -> WinResult<usize> {
-        let children = match self.block_on(db::list_children_by_inode(
-            &self.ctx.db,
-            file_context.ino,
-        )) {
-            Ok(c) => c,
-            Err(_) => return Err(NTSTATUS::STATUS_INTERNAL_ERROR),
-        };
+        let children =
+            match self.block_on(db::list_children_by_inode(&self.ctx.db, file_context.ino)) {
+                Ok(c) => c,
+                Err(_) => return Err(NTSTATUS::STATUS_INTERNAL_ERROR),
+            };
 
         let mut bytes_written = 0;
 
@@ -568,10 +570,7 @@ impl FileSystemContext for WinFspVfs {
         }
     }
 
-    fn flush(
-        &self,
-        file_context: &Self::FileContext,
-    ) -> WinResult<()> {
+    fn flush(&self, file_context: &Self::FileContext) -> WinResult<()> {
         if file_context.ino == db::ROOT_INODE {
             return Ok(());
         }
@@ -599,12 +598,7 @@ impl FileSystemContext for WinFspVfs {
         Ok(())
     }
 
-    fn cleanup(
-        &self,
-        file_context: &Self::FileContext,
-        _file_name: Option<&OsStr>,
-        flags: u32,
-    ) {
+    fn cleanup(&self, file_context: &Self::FileContext, _file_name: Option<&OsStr>, flags: u32) {
         // FspCleanupDelete: file is being deleted
         if flags & 0x01 != 0 {
             if file_context.ino != db::ROOT_INODE {
@@ -886,7 +880,7 @@ impl FileSystemContext for WinFspVfs {
         };
 
         // Check if target already exists
-        if let Ok(Some(_)) = self.block_on(db::lookup_by_parent_and_name(
+        if let Ok(Some(target_meta)) = self.block_on(db::lookup_by_parent_and_name(
             &self.ctx.db,
             new_parent_inode,
             new_file_name,
@@ -894,7 +888,14 @@ impl FileSystemContext for WinFspVfs {
             if !replace_if_exists {
                 return Err(NTSTATUS::STATUS_OBJECT_NAME_COLLISION);
             }
-            // TODO: handle replace (delete target first)
+            // Soft-delete the conflicting target so the rename can proceed.
+            if let Err(e) = self.block_on(db::soft_delete_by_inode(
+                &self.ctx.db,
+                target_meta.inode,
+            )) {
+                tracing::error!("rename: failed to soft-delete target: {e:#}");
+                return Err(NTSTATUS::STATUS_INTERNAL_ERROR);
+            }
         }
 
         // Determine new parent's file_id
@@ -993,11 +994,7 @@ impl FileSystemContext for WinFspVfs {
         Ok(())
     }
 
-    fn can_delete(
-        &self,
-        file_context: &Self::FileContext,
-        _file_name: &OsStr,
-    ) -> WinResult<()> {
+    fn can_delete(&self, file_context: &Self::FileContext, _file_name: &OsStr) -> WinResult<()> {
         if file_context.ino == db::ROOT_INODE {
             return Err(NTSTATUS::STATUS_CANNOT_DELETE);
         }
@@ -1060,12 +1057,10 @@ pub async fn mount_winfsp(ctx: VfsContext) -> anyhow::Result<VfsHandle> {
     params.volume_label = VOLUME_LABEL.to_string();
 
     // Create the filesystem host and mount
-    let host = tokio::task::spawn_blocking(move || {
-        FileSystemHost::new(fs, &mount_str, &params)
-    })
-    .await
-    .map_err(|e| anyhow::anyhow!("WinFSP spawn task panicked: {e}"))?
-    .map_err(|e| anyhow::anyhow!("failed to mount WinFSP at {}: {e}", mount_str))?;
+    let host = tokio::task::spawn_blocking(move || FileSystemHost::new(fs, &mount_str, &params))
+        .await
+        .map_err(|e| anyhow::anyhow!("WinFSP spawn task panicked: {e}"))?
+        .map_err(|e| anyhow::anyhow!("failed to mount WinFSP at {}: {e}", mount_str))?;
 
     info!("WinFSP filesystem mounted at {}", mount_str);
 

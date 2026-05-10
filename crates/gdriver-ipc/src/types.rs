@@ -59,10 +59,18 @@ pub struct JsonRpcError {
 
 impl JsonRpcError {
     pub fn parse_error() -> Self {
-        Self { code: -32700, message: "Parse error".into(), data: None }
+        Self {
+            code: -32700,
+            message: "Parse error".into(),
+            data: None,
+        }
     }
     pub fn invalid_request() -> Self {
-        Self { code: -32600, message: "Invalid Request".into(), data: None }
+        Self {
+            code: -32600,
+            message: "Invalid Request".into(),
+            data: None,
+        }
     }
     pub fn method_not_found(method: &str) -> Self {
         Self {
@@ -79,15 +87,27 @@ impl JsonRpcError {
         }
     }
     pub fn internal_error(detail: impl Into<String>) -> Self {
-        Self { code: -32603, message: detail.into(), data: None }
+        Self {
+            code: -32603,
+            message: detail.into(),
+            data: None,
+        }
     }
     /// Application-level: daemon is busy (e.g. shutting down).
     pub fn daemon_busy() -> Self {
-        Self { code: -32000, message: "Daemon busy".into(), data: None }
+        Self {
+            code: -32000,
+            message: "Daemon busy".into(),
+            data: None,
+        }
     }
     /// Application-level: no authenticated account.
     pub fn auth_required() -> Self {
-        Self { code: -32001, message: "Authentication required".into(), data: None }
+        Self {
+            code: -32001,
+            message: "Authentication required".into(),
+            data: None,
+        }
     }
     /// Application-level: requested resource not found.
     pub fn not_found(detail: &str) -> Self {
@@ -113,11 +133,21 @@ pub struct JsonRpcResponse {
 
 impl JsonRpcResponse {
     pub fn success(id: Option<JsonRpcId>, result: Value) -> Self {
-        Self { jsonrpc: "2.0".into(), result: Some(result), error: None, id }
+        Self {
+            jsonrpc: "2.0".into(),
+            result: Some(result),
+            error: None,
+            id,
+        }
     }
 
     pub fn error(id: Option<JsonRpcId>, error: JsonRpcError) -> Self {
-        Self { jsonrpc: "2.0".into(), result: None, error: Some(error), id }
+        Self {
+            jsonrpc: "2.0".into(),
+            result: None,
+            error: Some(error),
+            id,
+        }
     }
 
     pub fn is_success(&self) -> bool {
@@ -491,7 +521,10 @@ pub enum PushEvent {
     AccountQuotaUpdated(AccountQuotaPayload),
     OauthComplete(OauthCompletePayload),
     /// Unknown event forwarded as-is for forward compatibility.
-    Unknown { method: String, params: Option<Value> },
+    Unknown {
+        method: String,
+        params: Option<Value>,
+    },
 }
 
 impl PushEvent {
@@ -499,11 +532,8 @@ impl PushEvent {
     pub fn from_notification(method: &str, params: Option<Value>) -> anyhow::Result<Self> {
         use crate::methods::*;
 
-        fn decode<T: for<'de> Deserialize<'de>>(
-            params: Option<Value>,
-        ) -> anyhow::Result<T> {
-            serde_json::from_value(params.unwrap_or(Value::Null))
-                .map_err(anyhow::Error::from)
+        fn decode<T: for<'de> Deserialize<'de>>(params: Option<Value>) -> anyhow::Result<T> {
+            serde_json::from_value(params.unwrap_or(Value::Null)).map_err(anyhow::Error::from)
         }
 
         match method {
@@ -514,7 +544,10 @@ impl PushEvent {
             EVENT_ACCOUNT_CHANGED => Ok(Self::AccountChanged(decode(params)?)),
             EVENT_ACCOUNT_QUOTA_UPDATED => Ok(Self::AccountQuotaUpdated(decode(params)?)),
             EVENT_ONBOARDING_OAUTH_COMPLETE => Ok(Self::OauthComplete(decode(params)?)),
-            other => Ok(Self::Unknown { method: other.to_string(), params }),
+            other => Ok(Self::Unknown {
+                method: other.to_string(),
+                params,
+            }),
         }
     }
 

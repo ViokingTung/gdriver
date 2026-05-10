@@ -3,9 +3,11 @@
 //! Uses the `notify` crate to watch configured sync folders for changes and
 //! enqueues [`SyncTask`] entries with 300 ms debounce per path.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use sqlx::SqlitePool;
@@ -187,7 +189,10 @@ async fn reload_folders(
                 Err(e) => warn!("failed to watch {}: {}", path.display(), e),
             }
         } else {
-            debug!("sync folder does not exist yet, skipping: {}", path.display());
+            debug!(
+                "sync folder does not exist yet, skipping: {}",
+                path.display()
+            );
         }
     }
 
@@ -232,21 +237,37 @@ fn event_to_task(
 
     let operation = match kind {
         EventKind::Create(_) => {
-            if is_photos { "photos_backup" } else { "upload" }
+            if is_photos {
+                "photos_backup"
+            } else {
+                "upload"
+            }
         }
         EventKind::Modify(modify_kind) => match modify_kind {
             ModifyKind::Name(_) => {
-                if is_photos { "photos_backup" } else { "upload" }
+                if is_photos {
+                    "photos_backup"
+                } else {
+                    "upload"
+                }
             }
             ModifyKind::Data(_) | ModifyKind::Any => {
-                if is_photos { "photos_backup" } else { "upload" }
+                if is_photos {
+                    "photos_backup"
+                } else {
+                    "upload"
+                }
             }
             ModifyKind::Metadata(_) => {
                 // Metadata-only changes (e.g. permissions) are not interesting.
                 return None;
             }
             _ => {
-                if is_photos { "photos_backup" } else { "upload" }
+                if is_photos {
+                    "photos_backup"
+                } else {
+                    "upload"
+                }
             }
         },
         EventKind::Remove(remove_kind) => match remove_kind {
@@ -337,7 +358,10 @@ async fn walk_and_enqueue(
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            Box::pin(walk_and_enqueue(&path, account_id, operation, now, task_tx, count)).await;
+            Box::pin(walk_and_enqueue(
+                &path, account_id, operation, now, task_tx, count,
+            ))
+            .await;
             continue;
         }
         if !path.is_file() {
@@ -371,20 +395,28 @@ async fn walk_and_enqueue(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use notify::event::{CreateKind, ModifyKind, RemoveKind};
     use std::fs;
+
+    use notify::event::{CreateKind, ModifyKind, RemoveKind};
     use tempfile::TempDir;
+
+    use super::*;
 
     fn folder_map(root: &Path, account_id: &str) -> HashMap<PathBuf, (String, String)> {
         let mut m = HashMap::new();
-        m.insert(root.to_path_buf(), (account_id.to_string(), "drive".to_string()));
+        m.insert(
+            root.to_path_buf(),
+            (account_id.to_string(), "drive".to_string()),
+        );
         m
     }
 
     fn photos_folder_map(root: &Path, account_id: &str) -> HashMap<PathBuf, (String, String)> {
         let mut m = HashMap::new();
-        m.insert(root.to_path_buf(), (account_id.to_string(), "photos".to_string()));
+        m.insert(
+            root.to_path_buf(),
+            (account_id.to_string(), "photos".to_string()),
+        );
         m
     }
 
@@ -413,7 +445,12 @@ mod tests {
         fs::write(&file, b"data").unwrap();
 
         let map = folder_map(tmp.path(), "acct-2");
-        let task = event_to_task(&file, &EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)), &map).unwrap();
+        let task = event_to_task(
+            &file,
+            &EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
+            &map,
+        )
+        .unwrap();
 
         assert_eq!(task.operation, "upload");
         assert_eq!(task.account_id, "acct-2");
@@ -448,10 +485,12 @@ mod tests {
         fs::write(&file, b"data").unwrap();
 
         let map = folder_map(tmp.path(), "acct-1");
-        assert!(
-            event_to_task(&file, &EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any)), &map)
-                .is_none()
-        );
+        assert!(event_to_task(
+            &file,
+            &EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any)),
+            &map
+        )
+        .is_none());
     }
 
     #[test]
@@ -525,7 +564,12 @@ mod tests {
         fs::write(&file, b"fake-png").unwrap();
 
         let map = photos_folder_map(tmp.path(), "acct-1");
-        let task = event_to_task(&file, &EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)), &map).unwrap();
+        let task = event_to_task(
+            &file,
+            &EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
+            &map,
+        )
+        .unwrap();
 
         assert_eq!(task.operation, "photos_backup");
     }
@@ -549,9 +593,11 @@ mod tests {
         fs::write(&file, b"data").unwrap();
 
         let map = photos_folder_map(tmp.path(), "acct-1");
-        assert!(
-            event_to_task(&file, &EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any)), &map)
-                .is_none()
-        );
+        assert!(event_to_task(
+            &file,
+            &EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any)),
+            &map
+        )
+        .is_none());
     }
 }

@@ -10,13 +10,11 @@
 //! The access-token cache lives in a [`TokenStore`] instance. Upon daemon
 //! restart the cache is cold — the next API call will trigger a refresh.
 
-use std::collections::HashMap;
-use std::sync::RwLock;
-
-use keyring::Entry;
-use tracing::{debug, warn};
+use std::{collections::HashMap, sync::RwLock};
 
 use gdriver_api::auth::TokenSet;
+use keyring::Entry;
+use tracing::{debug, warn};
 
 // ─── Keyring constants ────────────────────────────────────────────────────────
 
@@ -41,7 +39,9 @@ pub struct TokenStore {
 impl TokenStore {
     /// Create an empty store with a cold access-token cache.
     pub fn new() -> Self {
-        Self { access_tokens: RwLock::new(HashMap::new()) }
+        Self {
+            access_tokens: RwLock::new(HashMap::new()),
+        }
     }
 
     // ── Refresh tokens (keyring) ──────────────────────────────────────────
@@ -50,8 +50,7 @@ impl TokenStore {
     ///
     /// If a token already exists for this `account_id`, it is overwritten.
     pub fn save_refresh_token(&self, account_id: &str, refresh_token: &str) -> anyhow::Result<()> {
-        let entry =
-            Entry::new(KEYRING_SERVICE, &keyring_account(account_id))?;
+        let entry = Entry::new(KEYRING_SERVICE, &keyring_account(account_id))?;
         entry.set_password(refresh_token)?;
         debug!("refresh token saved to keyring for account {account_id}");
         Ok(())
@@ -61,8 +60,7 @@ impl TokenStore {
     ///
     /// Returns `Ok(None)` when no token exists for this account.
     pub fn load_refresh_token(&self, account_id: &str) -> anyhow::Result<Option<String>> {
-        let entry =
-            Entry::new(KEYRING_SERVICE, &keyring_account(account_id))?;
+        let entry = Entry::new(KEYRING_SERVICE, &keyring_account(account_id))?;
 
         match entry.get_password() {
             Ok(pw) => {
@@ -73,8 +71,9 @@ impl TokenStore {
                 debug!("no refresh token in keyring for account {account_id}");
                 Ok(None)
             }
-            Err(e) => Err(anyhow::Error::from(e)
-                .context(format!("failed to load refresh token for account {account_id}"))),
+            Err(e) => Err(anyhow::Error::from(e).context(format!(
+                "failed to load refresh token for account {account_id}"
+            ))),
         }
     }
 
@@ -82,8 +81,7 @@ impl TokenStore {
     ///
     /// Idempotent: returns `Ok(())` even if no entry existed.
     pub fn delete_refresh_token(&self, account_id: &str) -> anyhow::Result<()> {
-        let entry =
-            Entry::new(KEYRING_SERVICE, &keyring_account(account_id))?;
+        let entry = Entry::new(KEYRING_SERVICE, &keyring_account(account_id))?;
 
         match entry.delete_credential() {
             Ok(()) => {
@@ -94,8 +92,9 @@ impl TokenStore {
                 debug!("no refresh token to delete for account {account_id}");
                 Ok(())
             }
-            Err(e) => Err(anyhow::Error::from(e)
-                .context(format!("failed to delete refresh token for account {account_id}"))),
+            Err(e) => Err(anyhow::Error::from(e).context(format!(
+                "failed to delete refresh token for account {account_id}"
+            ))),
         }
     }
 
@@ -132,7 +131,10 @@ impl TokenStore {
 
     /// Clear the cached access token for a single account.
     pub fn clear_access_token(&self, account_id: &str) {
-        let mut cache = self.access_tokens.write().unwrap_or_else(|e| e.into_inner());
+        let mut cache = self
+            .access_tokens
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         cache.remove(account_id);
         debug!("access token cleared for account {account_id}");
     }
@@ -169,8 +171,9 @@ impl Default for TokenStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use gdriver_api::auth::TokenSet;
+
+    use super::*;
 
     fn dummy_token_set() -> TokenSet {
         TokenSet {
@@ -269,7 +272,9 @@ mod tests {
     #[ignore]
     fn keyring_load_nonexistent_returns_none() {
         let store = TokenStore::new();
-        let result = store.load_refresh_token("gdriver-test-nonexistent").unwrap();
+        let result = store
+            .load_refresh_token("gdriver-test-nonexistent")
+            .unwrap();
         assert_eq!(result, None);
     }
 
