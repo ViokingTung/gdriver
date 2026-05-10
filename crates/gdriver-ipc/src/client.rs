@@ -28,10 +28,13 @@ mod windows_impl {
     use windows_sys::Win32::{
         Foundation::INVALID_HANDLE_VALUE,
         Storage::FileSystem::{
-            CreateFileW, ReadFile, WriteFile, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
-            FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+            CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            OPEN_EXISTING,
         },
-        System::Pipes::PIPE_READMODE_BYTE,
+        System::{
+            Pipes::PIPE_READMODE_BYTE,
+            IO::{ReadFile, WriteFile},
+        },
     };
 
     pub struct NamedPipeClient {
