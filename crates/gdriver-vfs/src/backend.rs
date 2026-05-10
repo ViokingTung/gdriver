@@ -66,8 +66,11 @@ pub struct VfsHandle {
     #[cfg(target_os = "linux")]
     pub(crate) inner: Option<fuser::BackgroundSession>,
 
-    #[cfg(target_os = "windows")]
-    pub(crate) inner: Option<winfsp::filesystem::FileSystemHost>,
+    #[cfg(all(target_os = "windows", feature = "winfsp-vfs"))]
+    pub(crate) inner: Option<winfsp::host::FileSystemHost>,
+
+    #[cfg(all(target_os = "windows", not(feature = "winfsp-vfs")))]
+    pub(crate) inner: Option<()>,
 
     #[cfg(target_os = "macos")]
     pub(crate) inner: Option<crate::macos::VfsHandleInner>,
@@ -87,10 +90,19 @@ impl VfsHandle {
     }
 
     /// Create a new VFS handle for the Windows WinFSP backend.
-    #[cfg(target_os = "windows")]
-    pub fn new_windows(host: winfsp::filesystem::FileSystemHost, mount_point: PathBuf) -> Self {
+    #[cfg(all(target_os = "windows", feature = "winfsp-vfs"))]
+    pub fn new_windows(host: winfsp::host::FileSystemHost, mount_point: PathBuf) -> Self {
         Self {
             inner: Some(host),
+            mount_point,
+        }
+    }
+
+    /// Create a new VFS handle stub (WinFSP feature disabled).
+    #[cfg(all(target_os = "windows", not(feature = "winfsp-vfs")))]
+    pub fn new_windows(_host: (), mount_point: PathBuf) -> Self {
+        Self {
+            inner: Some(_host),
             mount_point,
         }
     }
@@ -130,7 +142,7 @@ impl Drop for VfsHandle {
         }
 
         // On Windows, dropping the FileSystemHost unmounts the virtual drive.
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "winfsp-vfs"))]
         {
             if let Some(host) = self.inner.take() {
                 tracing::info!(
@@ -139,6 +151,11 @@ impl Drop for VfsHandle {
                 );
                 drop(host);
             }
+        }
+
+        #[cfg(all(target_os = "windows", not(feature = "winfsp-vfs")))]
+        {
+            let _ = self.inner.take();
         }
 
         // On macOS, drop the platform-specific handle.
