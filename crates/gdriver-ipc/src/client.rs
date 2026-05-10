@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use std::io::BufRead;
 use std::{
     cell::RefCell,
     io::Write,
@@ -15,7 +17,7 @@ use std::{
 mod windows_impl {
     use std::{
         ffi::OsStr,
-        io::{self, BufRead, BufReader, Read, Write},
+        io::{self, BufReader, Read, Write},
         os::windows::{
             ffi::OsStrExt,
             io::{AsRawHandle, FromRawHandle, OwnedHandle},
@@ -26,13 +28,10 @@ mod windows_impl {
     use windows_sys::Win32::{
         Foundation::INVALID_HANDLE_VALUE,
         Storage::FileSystem::{
-            CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-            OPEN_EXISTING,
+            CreateFileW, ReadFile, WriteFile, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+            FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
         },
-        System::{
-            Pipes::PIPE_READMODE_BYTE,
-            IO::{ReadFile, WriteFile},
-        },
+        System::Pipes::PIPE_READMODE_BYTE,
     };
 
     pub struct NamedPipeClient {
