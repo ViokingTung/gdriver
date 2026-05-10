@@ -54,7 +54,7 @@ export default function PreferencesDialog() {
       .catch((e) => {
         console.error("[get_sync_folders] failed:", e);
       });
-    invoke<unknown>("get_preferences")
+    invoke<{ vfs?: { sync_mode?: "stream" | "mirror" } }>("get_preferences")
       .then((prefs) => {
         if (prefs?.vfs?.sync_mode) setSyncMode(prefs.vfs.sync_mode);
       })

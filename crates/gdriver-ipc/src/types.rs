@@ -191,17 +191,12 @@ pub enum SyncState {
 }
 
 /// Whether the user chose Stream (on-demand download) or Mirror (full local copy).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncMode {
+    #[default]
     Stream,
     Mirror,
-}
-
-impl Default for SyncMode {
-    fn default() -> Self {
-        Self::Stream
-    }
 }
 
 /// Folder synchronisation type.

@@ -15,7 +15,7 @@ use std::{
 mod windows_impl {
     use std::{
         ffi::OsStr,
-        io::{self, BufReader, Read, Write},
+        io::{self, BufRead, BufReader, Read, Write},
         os::windows::{
             ffi::OsStrExt,
             io::{AsRawHandle, FromRawHandle, OwnedHandle},
@@ -93,7 +93,7 @@ mod windows_impl {
     }
 
     impl NamedPipeClient {
-        pub fn connect(pipe_name: &str, timeout: Duration) -> io::Result<Self> {
+        pub fn connect(pipe_name: &str, _timeout: Duration) -> io::Result<Self> {
             let wide_name: Vec<u16> = OsStr::new(pipe_name)
                 .encode_wide()
                 .chain(std::iter::once(0))
