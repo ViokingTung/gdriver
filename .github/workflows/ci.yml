@@ -12,7 +12,7 @@ env:
 jobs:
   # ── Rust: format, clippy, build, test ──────────────────────────────────
   rust-check:
-    name: Rust Check
+    name: Rust Check (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
