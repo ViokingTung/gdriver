@@ -11,17 +11,22 @@
 //! channel senders) so command handlers can extract a clone from the
 //! `DaemonState` lock without holding it for the duration of the call.
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::Arc;
-
-use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::{oneshot, Mutex};
-use tracing::{debug, error, info, warn};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        Arc,
+    },
+};
 
 use gdriver_ipc::{JsonRpcError, JsonRpcId, JsonRpcRequest};
+use serde_json::Value;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    sync::{oneshot, Mutex},
+};
+use tracing::{debug, error, info, warn};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,19 +80,15 @@ impl DaemonClient {
     /// Send a JSON-RPC request and await the daemon's response.
     ///
     /// Returns `Err` if the call fails at the transport or JSON-RPC level.
-    pub async fn call(
-        &self,
-        method: &str,
-        params: Option<Value>,
-    ) -> anyhow::Result<Value> {
+    pub async fn call(&self, method: &str, params: Option<Value>) -> anyhow::Result<Value> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel::<Result<Value, JsonRpcError>>();
 
         self.pending.lock().await.insert(id, tx);
 
         let req = JsonRpcRequest::new(method, params, JsonRpcId::Num(id));
-        let mut bytes = serde_json::to_vec(&req)
-            .map_err(|e| anyhow::anyhow!("serialise error: {e}"))?;
+        let mut bytes =
+            serde_json::to_vec(&req).map_err(|e| anyhow::anyhow!("serialise error: {e}"))?;
         bytes.push(b'\n');
 
         self.write_tx
@@ -173,17 +174,19 @@ impl DaemonClient {
         tokio::spawn(writer_task(writer, write_rx));
         tokio::spawn(reader_task(reader, Arc::clone(&pending), app_handle));
 
-        Self { write_tx, pending, next_id }
+        Self {
+            write_tx,
+            pending,
+            next_id,
+        }
     }
 }
 
 // ─── Background tasks ─────────────────────────────────────────────────────────
 
 /// Drains the write channel and forwards each byte slice to the daemon.
-async fn writer_task<W>(
-    mut writer: W,
-    mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
-) where
+async fn writer_task<W>(mut writer: W, mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>)
+where
     W: tokio::io::AsyncWrite + Unpin,
 {
     while let Some(bytes) = rx.recv().await {
@@ -197,11 +200,8 @@ async fn writer_task<W>(
 /// Reads newline-delimited JSON from the daemon and dispatches each message:
 /// - JSON-RPC response (has numeric `id`, no `method`) → resolves pending call
 /// - JSON-RPC notification (has `method`, no `id`) → emits Tauri event
-async fn reader_task<R>(
-    reader: R,
-    pending: PendingMap,
-    app_handle: AppHandle,
-) where
+async fn reader_task<R>(reader: R, pending: PendingMap, app_handle: AppHandle)
+where
     R: tokio::io::AsyncRead + Unpin,
 {
     let mut reader = BufReader::new(reader);

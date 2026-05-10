@@ -1,15 +1,15 @@
 //! Incremental sync: poll the Drive Changes API periodically and update the
 //! local file metadata database and sync queue accordingly.
 
+use gdriver_api::{
+    changes::{self, Change},
+    client::DriveClient,
+};
+use gdriver_ipc::SyncMode;
 use sqlx::SqlitePool;
 use tracing::{debug, info, warn};
 
-use gdriver_api::client::DriveClient;
-use gdriver_api::changes::{self, Change};
-use gdriver_ipc::SyncMode;
-
-use crate::db;
-use crate::sync::initial::map_api_file_to_db;
+use crate::{db, sync::initial::map_api_file_to_db};
 
 /// Run one incremental-sync cycle for the given account.
 ///
@@ -48,10 +48,10 @@ pub async fn incremental_sync(
         let response = changes::changes_list(
             client,
             &current_token,
-            Some(1000),         // max page size
-            None,               // default fields
-            None,               // no shared drive
-            Some(true),         // include removed items
+            Some(1000), // max page size
+            None,       // default fields
+            None,       // no shared drive
+            Some(true), // include removed items
         )
         .await?;
 
@@ -66,8 +66,11 @@ pub async fn incremental_sync(
         total_changes += on_this_page;
 
         debug!(
-            account_id, page_num, on_this_page,
-            total = total_changes, "incremental sync: change page"
+            account_id,
+            page_num,
+            on_this_page,
+            total = total_changes,
+            "incremental sync: change page"
         );
 
         for change in &page_changes {
@@ -93,11 +96,7 @@ pub async fn incremental_sync(
         debug!(account_id, %tok, "incremental sync: page token updated");
     }
 
-    info!(
-        account_id,
-        total_changes,
-        "incremental sync: complete"
-    );
+    info!(account_id, total_changes, "incremental sync: complete");
     Ok(total_changes)
 }
 
@@ -121,9 +120,7 @@ async fn process_change(
         db::files::mark_trashed(db, file_id, account_id).await?;
 
         // If we have a local copy, enqueue a delete task.
-        if let Some(existing) =
-            db::files::get_file_by_id(db, file_id, account_id).await?
-        {
+        if let Some(existing) = db::files::get_file_by_id(db, file_id, account_id).await? {
             if existing.local_path.is_some() {
                 enqueue_task(db, account_id, file_id, "delete", &existing).await;
             }
@@ -137,7 +134,10 @@ async fn process_change(
         None => {
             // Should not happen: !removed implies file should be present,
             // but handle gracefully.
-            warn!(file_id, account_id, "change with removed=false but no file data");
+            warn!(
+                file_id,
+                account_id, "change with removed=false but no file data"
+            );
             return Ok(());
         }
     };
@@ -194,7 +194,9 @@ async fn enqueue_task(
 
     match db::queue::enqueue(db, &task).await {
         Ok(t) => debug!(
-            account_id, file_id, operation,
+            account_id,
+            file_id,
+            operation,
             task_id = t.id,
             "incremental sync: task enqueued"
         ),
@@ -271,18 +273,72 @@ async fn enqueue_download_for_change(
                 "mirror: failed to enqueue download task"
             ),
         }
+    } else {
+        // Stream mode: only enqueue downloads for files within configured sync folders.
+        let sync_folders = match db::sync_folders::list_by_account(db, account_id).await {
+            Ok(folders) => folders,
+            Err(e) => {
+                warn!(account_id, error = %e, "stream: failed to load sync folders");
+                return;
+            }
+        };
+
+        if sync_folders.is_empty() {
+            return;
+        }
+
+        let file_path = db_file.local_path.clone().unwrap_or_else(|| {
+            format!("{}/{}", mount_point.trim_end_matches('/'), db_file.name)
+        });
+
+        let dominated = sync_folders.iter().any(|folder| {
+            folder.is_enabled && file_path.starts_with(&folder.local_path)
+        });
+
+        if !dominated {
+            return;
+        }
+
+        let now = chrono::Utc::now().timestamp_millis();
+        let task = db::queue::SyncTask {
+            id: None,
+            account_id: account_id.to_string(),
+            file_id: Some(db_file.id.clone()),
+            operation: "download".to_string(),
+            local_path: Some(file_path),
+            priority: 5,
+            status: "pending".to_string(),
+            retry_count: 0,
+            error_msg: None,
+            created_at: now,
+            updated_at: now,
+        };
+
+        match db::queue::enqueue(db, &task).await {
+            Ok(t) => debug!(
+                account_id,
+                file_id = %db_file.id,
+                task_id = t.id,
+                "stream: download task enqueued for synced folder file"
+            ),
+            Err(e) => warn!(
+                account_id,
+                file_id = %db_file.id,
+                error = %e,
+                "stream: failed to enqueue download task"
+            ),
+        }
     }
-    // Stream mode: TODO — enqueue only for files within configured sync
-    // folders.  For now, no-op (matching previous stub behavior).
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use gdriver_api::files::DriveFile as ApiDriveFile;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     async fn test_pool() -> SqlitePool {
         let opts = SqliteConnectOptions::new()
@@ -335,12 +391,7 @@ mod tests {
         }
     }
 
-    fn make_change(
-        file_id: &str,
-        removed: bool,
-        trashed: bool,
-        name: &str,
-    ) -> Change {
+    fn make_change(file_id: &str, removed: bool, trashed: bool, name: &str) -> Change {
         Change {
             kind: Some("drive#change".into()),
             change_type: Some("file".into()),
@@ -363,7 +414,9 @@ mod tests {
         insert_account(&pool, "acct-1").await;
 
         let change = make_change("f1", false, false, "new-file.txt");
-        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive").await.unwrap();
+        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive")
+            .await
+            .unwrap();
 
         let f = db::files::get_file_by_id(&pool, "f1", "acct-1")
             .await
@@ -386,7 +439,9 @@ mod tests {
 
         // Now process a "removed" change
         let change = make_change("f2", true, false, "");
-        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive").await.unwrap();
+        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive")
+            .await
+            .unwrap();
 
         let f = db::files::get_file_by_id(&pool, "f2", "acct-1")
             .await
@@ -406,7 +461,9 @@ mod tests {
 
         // File change with trashed=true
         let change = make_change("f3", false, true, "moved-to-trash.txt");
-        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive").await.unwrap();
+        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive")
+            .await
+            .unwrap();
 
         let f = db::files::get_file_by_id(&pool, "f3", "acct-1")
             .await
@@ -438,7 +495,9 @@ mod tests {
             file: Some(modified),
         };
 
-        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive").await.unwrap();
+        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive")
+            .await
+            .unwrap();
 
         let f = db::files::get_file_by_id(&pool, "f4", "acct-1")
             .await
@@ -495,9 +554,15 @@ mod tests {
         insert_account(&pool, "acct-1").await;
 
         // No page token stored — should skip gracefully
-        let count = incremental_sync(&pool, "acct-1", &DriveClient::new("unused"), SyncMode::Stream, "/tmp/drive")
-            .await
-            .unwrap();
+        let count = incremental_sync(
+            &pool,
+            "acct-1",
+            &DriveClient::new("unused"),
+            SyncMode::Stream,
+            "/tmp/drive",
+        )
+        .await
+        .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -507,14 +572,20 @@ mod tests {
         insert_account(&pool, "acct-1").await;
 
         // Simulate the result of incremental sync: save token, apply changes
-        db::tokens::set_token(&pool, "acct-1", "old-tok").await.unwrap();
+        db::tokens::set_token(&pool, "acct-1", "old-tok")
+            .await
+            .unwrap();
 
         // Process a change directly
         let change = make_change("f-new", false, false, "hello.txt");
-        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive").await.unwrap();
+        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive")
+            .await
+            .unwrap();
 
         // Update token (as incremental_sync does)
-        db::tokens::set_token(&pool, "acct-1", "new-tok").await.unwrap();
+        db::tokens::set_token(&pool, "acct-1", "new-tok")
+            .await
+            .unwrap();
 
         // Verify
         let tok = db::tokens::get_token(&pool, "acct-1").await.unwrap();
@@ -540,7 +611,9 @@ mod tests {
 
         // Process removed change
         let change = make_change("f-local", true, false, "");
-        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive").await.unwrap();
+        process_change(&pool, "acct-1", &change, SyncMode::Stream, "/tmp/drive")
+            .await
+            .unwrap();
 
         // File should be trashed
         let f = db::files::get_file_by_id(&pool, "f-local", "acct-1")
@@ -578,7 +651,10 @@ mod tests {
 
         // A download task should be enqueued
         let task = db::queue::next_pending_task(&pool).await.unwrap();
-        assert!(task.is_some(), "mirror mode should enqueue download for new file");
+        assert!(
+            task.is_some(),
+            "mirror mode should enqueue download for new file"
+        );
         let task = task.unwrap();
         assert_eq!(task.operation, "download");
         assert_eq!(task.file_id.as_deref(), Some("f-mirror"));
@@ -590,8 +666,7 @@ mod tests {
         insert_account(&pool, "acct-1").await;
 
         let mut change = make_change("folder-1", false, false, "My Folder");
-        change.file.as_mut().unwrap().mime_type =
-            Some("application/vnd.google-apps.folder".into());
+        change.file.as_mut().unwrap().mime_type = Some("application/vnd.google-apps.folder".into());
 
         process_change(&pool, "acct-1", &change, SyncMode::Mirror, "/tmp/drive")
             .await
@@ -599,7 +674,10 @@ mod tests {
 
         // No download task should be enqueued for a folder
         let task = db::queue::next_pending_task(&pool).await.unwrap();
-        assert!(task.is_none(), "mirror mode should not enqueue download for folders");
+        assert!(
+            task.is_none(),
+            "mirror mode should not enqueue download for folders"
+        );
     }
 
     #[tokio::test]
@@ -621,7 +699,10 @@ mod tests {
 
         // No download task in stream mode (no sync folders configured)
         let task = db::queue::next_pending_task(&pool).await.unwrap();
-        assert!(task.is_none(), "stream mode should not enqueue download without sync folders");
+        assert!(
+            task.is_none(),
+            "stream mode should not enqueue download without sync folders"
+        );
     }
 
     #[tokio::test]
@@ -646,6 +727,9 @@ mod tests {
             .await;
 
         let task = db::queue::next_pending_task(&pool).await.unwrap();
-        assert!(task.is_none(), "should skip file with sync_state=downloading");
+        assert!(
+            task.is_none(),
+            "should skip file with sync_state=downloading"
+        );
     }
 }

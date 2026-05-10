@@ -4,8 +4,10 @@
 //! document export, and resumable upload with chunking.
 
 use gdriver_api::client::DriveClient;
-use wiremock::matchers::{header, method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{header, method, path, query_param},
+    Mock, MockServer, ResponseTemplate,
+};
 
 fn sample_file_json(id: &str, name: &str, mime: &str) -> String {
     format!(
@@ -38,12 +40,10 @@ async fn upload_multipart_then_download_verify_content() {
     Mock::given(method("POST"))
         .and(path("/upload/drive/v3/files"))
         .and(query_param("uploadType", "multipart"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("uploaded-1", "hello.txt", "text/plain"),
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            sample_file_json("uploaded-1", "hello.txt", "text/plain"),
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -88,18 +88,12 @@ async fn upload_multipart_then_download_verify_content() {
     Mock::given(method("GET"))
         .and(path("/drive/v3/files/uploaded-1"))
         .and(query_param("alt", "media"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_raw(file_content.to_vec(), "text/plain"),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(file_content.to_vec(), "text/plain"))
         .expect(1)
         .mount(&server)
         .await;
 
-    let dl_url = format!(
-        "{}/drive/v3/files/uploaded-1?alt=media",
-        server.uri()
-    );
+    let dl_url = format!("{}/drive/v3/files/uploaded-1?alt=media", server.uri());
     let dl_resp = client.get_raw(&dl_url).await.unwrap();
     assert_eq!(dl_resp.status().as_u16(), 200);
     let downloaded = dl_resp.bytes().await.unwrap();
@@ -117,13 +111,14 @@ async fn export_google_doc_to_docx() {
 
     Mock::given(method("GET"))
         .and(path("/drive/v3/files/gdoc-1/export"))
-        .and(query_param("mimeType", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                docx_content.to_vec(),
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ),
-        )
+        .and(query_param(
+            "mimeType",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            docx_content.to_vec(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -140,7 +135,10 @@ async fn export_google_doc_to_docx() {
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    assert!(content_type.contains("wordprocessingml"), "expected docx content type");
+    assert!(
+        content_type.contains("wordprocessingml"),
+        "expected docx content type"
+    );
 
     let body = resp.bytes().await.unwrap();
     assert_eq!(&body[..], docx_content);
@@ -153,13 +151,14 @@ async fn export_google_sheet_to_xlsx() {
 
     Mock::given(method("GET"))
         .and(path("/drive/v3/files/gsheet-1/export"))
-        .and(query_param("mimeType", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                b"PK\x03\x04fake-xlsx".to_vec(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            ),
-        )
+        .and(query_param(
+            "mimeType",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            b"PK\x03\x04fake-xlsx".to_vec(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -253,12 +252,10 @@ async fn resumable_upload_full_flow_start_chunks_query() {
     Mock::given(method("PUT"))
         .and(path("/resume/session-abc"))
         .and(header("Content-Range", "bytes 100-299/300"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("large-1", "large-file.bin", "application/octet-stream"),
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            sample_file_json("large-1", "large-file.bin", "application/octet-stream"),
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;

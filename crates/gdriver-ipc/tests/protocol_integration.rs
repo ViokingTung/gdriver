@@ -4,11 +4,15 @@
 //! and verifies request/response round-trips, notification handling, and error
 //! cases — simulating "Daemon 启动 + IPC 连通性测试".
 
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    io::{BufRead, BufReader, Write},
+    os::unix::net::{UnixListener, UnixStream},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use gdriver_ipc::types::*;
 use serde_json::{json, Value};
@@ -17,7 +21,12 @@ static SOCK_SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn unique_sock_path(label: &str) -> std::path::PathBuf {
     let n = SOCK_SEQ.fetch_add(1, Ordering::SeqCst);
-    std::env::temp_dir().join(format!("gdriver-{}-{}-{}.sock", label, std::process::id(), n))
+    std::env::temp_dir().join(format!(
+        "gdriver-{}-{}-{}.sock",
+        label,
+        std::process::id(),
+        n
+    ))
 }
 
 /// Start a mock daemon on a temp socket that handles one JSON-RPC request.
@@ -68,8 +77,12 @@ fn round_trip_ping_pong() {
     });
 
     let stream = UnixStream::connect(&sock_path).expect("connect failed");
-    stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     let mut reader = BufReader::new(stream);
 
@@ -114,8 +127,12 @@ fn round_trip_sync_state_query() {
     });
 
     let stream = UnixStream::connect(&sock_path).expect("connect failed");
-    stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     let mut reader = BufReader::new(stream);
 
@@ -154,8 +171,12 @@ fn method_not_found_error() {
     });
 
     let stream = UnixStream::connect(&sock_path).expect("connect failed");
-    stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     let mut reader = BufReader::new(stream);
 
@@ -172,7 +193,10 @@ fn method_not_found_error() {
     let err = response.error.unwrap();
     assert_eq!(err.code, -32601); // Method not found
     assert_eq!(err.message, "Method not found");
-    assert_eq!(err.data, Some(serde_json::Value::String("unknown.method".into())));
+    assert_eq!(
+        err.data,
+        Some(serde_json::Value::String("unknown.method".into()))
+    );
 
     while !done.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(10));
@@ -188,8 +212,12 @@ fn internal_error_response() {
     });
 
     let stream = UnixStream::connect(&sock_path).expect("connect failed");
-    stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     let mut reader = BufReader::new(stream);
 
@@ -285,8 +313,12 @@ fn pipelining_two_requests_on_same_socket() {
     });
 
     let stream = UnixStream::connect(&tmp).expect("connect");
-    stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_secs(2))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     let mut reader = BufReader::new(stream);
 
@@ -331,8 +363,12 @@ fn large_payload_round_trip() {
     });
 
     let stream = UnixStream::connect(&sock_path).expect("connect failed");
-    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
     let mut writer = stream.try_clone().unwrap();
     let mut reader = BufReader::new(stream);
 

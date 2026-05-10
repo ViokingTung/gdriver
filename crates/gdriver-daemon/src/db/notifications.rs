@@ -126,10 +126,9 @@ pub async fn dismiss_notification(pool: &SqlitePool, id: i64) -> anyhow::Result<
 /// Count unread notifications.
 #[allow(dead_code)]
 pub async fn count_unread(pool: &SqlitePool) -> anyhow::Result<i64> {
-    let row: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM notifications WHERE is_read = 0")
-            .fetch_one(pool)
-            .await?;
+    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM notifications WHERE is_read = 0")
+        .fetch_one(pool)
+        .await?;
     Ok(row.0)
 }
 
@@ -137,8 +136,9 @@ pub async fn count_unread(pool: &SqlitePool) -> anyhow::Result<i64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     async fn test_pool() -> SqlitePool {
         let opts = SqliteConnectOptions::new()
@@ -173,12 +173,24 @@ mod tests {
     #[tokio::test]
     async fn insert_and_list() {
         let pool = test_pool().await;
-        insert_notification(&pool, &make_notification("sync_error", r#"{"file_name":"a.txt","error_msg":"fail","error_id":1}"#))
-            .await
-            .unwrap();
-        insert_notification(&pool, &make_notification("conflict", r#"{"file_name":"b.txt","conflict_copy_name":"b (conflict).txt"}"#))
-            .await
-            .unwrap();
+        insert_notification(
+            &pool,
+            &make_notification(
+                "sync_error",
+                r#"{"file_name":"a.txt","error_msg":"fail","error_id":1}"#,
+            ),
+        )
+        .await
+        .unwrap();
+        insert_notification(
+            &pool,
+            &make_notification(
+                "conflict",
+                r#"{"file_name":"b.txt","conflict_copy_name":"b (conflict).txt"}"#,
+            ),
+        )
+        .await
+        .unwrap();
 
         let all = list_notifications(&pool, false, 10).await.unwrap();
         assert_eq!(all.len(), 2);
@@ -205,7 +217,9 @@ mod tests {
         let n = insert_notification(&pool, &make_notification("sync_error", "{}"))
             .await
             .unwrap();
-        super::dismiss_notification(&pool, n.id.unwrap()).await.unwrap();
+        super::dismiss_notification(&pool, n.id.unwrap())
+            .await
+            .unwrap();
         let all = list_notifications(&pool, false, 10).await.unwrap();
         assert!(all.is_empty());
     }

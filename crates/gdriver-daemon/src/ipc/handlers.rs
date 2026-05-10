@@ -1,19 +1,17 @@
 use std::sync::Arc;
 
+use gdriver_ipc::{
+    AccountChangedPayload, JsonRpcError, JsonRpcRequest, JsonRpcResponse, OauthCompletePayload,
+    Preferences, PushEvent,
+};
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use gdriver_ipc::{
-    AccountChangedPayload, JsonRpcError, JsonRpcRequest, JsonRpcResponse, OauthCompletePayload,
-    Preferences, PushEvent,
+use crate::{
+    auth::TokenStore, config::ConfigHandle, ipc::server::PushSender, sync::engine::SyncCommand,
 };
-
-use crate::auth::TokenStore;
-use crate::config::ConfigHandle;
-use crate::ipc::server::PushSender;
-use crate::sync::engine::SyncCommand;
 
 // ─── Shared context ───────────────────────────────────────────────────────────
 
@@ -44,7 +42,14 @@ impl RouterContext {
         tokens: Arc<TokenStore>,
         watcher_reload_tx: mpsc::Sender<()>,
     ) -> Self {
-        Self { db, config, tokens, push_tx, sync_cmd_tx, watcher_reload_tx }
+        Self {
+            db,
+            config,
+            tokens,
+            push_tx,
+            sync_cmd_tx,
+            watcher_reload_tx,
+        }
     }
 }
 
@@ -186,7 +191,10 @@ impl Router {
         let id = req.id.clone();
         let is_notification = req.is_notification();
 
-        debug!("dispatch: method={} notification={is_notification}", req.method);
+        debug!(
+            "dispatch: method={} notification={is_notification}",
+            req.method
+        );
 
         let result = self.dispatch(&req.method, req.params).await;
 
@@ -201,11 +209,7 @@ impl Router {
     }
 
     /// Route a method name + params to the correct handler.
-    async fn dispatch(
-        &self,
-        method: &str,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn dispatch(&self, method: &str, params: Option<Value>) -> Result<Value, JsonRpcError> {
         use gdriver_ipc::methods::*;
 
         match method {
@@ -280,15 +284,12 @@ impl Router {
 
     async fn handle_prefs_get(&self) -> Result<Value, JsonRpcError> {
         let prefs = self.ctx.config.read().await;
-        serde_json::to_value(&*prefs)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(&*prefs).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     async fn handle_prefs_save(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
-        let new_prefs: Preferences = serde_json::from_value(
-            params.unwrap_or(Value::Null),
-        )
-        .map_err(|e| JsonRpcError::invalid_params(&e.to_string()))?;
+        let new_prefs: Preferences = serde_json::from_value(params.unwrap_or(Value::Null))
+            .map_err(|e| JsonRpcError::invalid_params(&e.to_string()))?;
 
         // ── Windows / macOS: sync auto-start on preference change ─────
         #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -341,8 +342,7 @@ impl Router {
             speed: None,
             pending: None,
         };
-        serde_json::to_value(payload)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(payload).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     async fn handle_sync_pause(&self) -> Result<Value, JsonRpcError> {
@@ -397,15 +397,11 @@ impl Router {
             })
             .collect();
 
-        serde_json::to_value(items)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(items).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     /// Return a page of sync activity items.
-    async fn handle_sync_get_activity(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_sync_get_activity(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let page = params
             .as_ref()
             .and_then(|v| v.get("page"))
@@ -443,15 +439,11 @@ impl Router {
             has_more,
         };
 
-        serde_json::to_value(page_result)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(page_result).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     /// Mark a sync error as resolved and trigger a retry for the associated file.
-    async fn handle_sync_retry_error(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_sync_retry_error(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let error_id = params
             .as_ref()
             .and_then(|v| v.get("errorId"))
@@ -486,8 +478,7 @@ impl Router {
             })
             .collect();
 
-        serde_json::to_value(errors)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(errors).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     /// Switch the sync mode (Stream ↔ Mirror).
@@ -495,10 +486,7 @@ impl Router {
     /// Updates the config, persists it to disk, and sends a `SwitchMode` command
     /// to the sync engine which handles the actual migration (enqueueing
     /// downloads for Stream→Mirror, resetting files for Mirror→Stream).
-    async fn handle_set_sync_mode(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_set_sync_mode(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let new_mode: gdriver_ipc::SyncMode = params
             .as_ref()
             .and_then(|v| v.get("mode"))
@@ -543,10 +531,7 @@ impl Router {
     // ── Notification handlers ────────────────────────────────────────────────
 
     /// Return a list of notifications.
-    async fn handle_notification_list(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_notification_list(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let unread_only = params
             .as_ref()
             .and_then(|v| v.get("unreadOnly"))
@@ -693,13 +678,12 @@ impl Router {
         info!("folder.add: path={}, type={}", local_path, folder_type);
 
         // Use the first available account.
-        let account_id: String = sqlx::query_scalar(
-            "SELECT id FROM accounts ORDER BY last_used_at DESC LIMIT 1",
-        )
-        .fetch_optional(&self.ctx.db)
-        .await
-        .map_err(|e| JsonRpcError::internal_error(e.to_string()))?
-        .ok_or_else(|| JsonRpcError::internal_error("no account connected"))?;
+        let account_id: String =
+            sqlx::query_scalar("SELECT id FROM accounts ORDER BY last_used_at DESC LIMIT 1")
+                .fetch_optional(&self.ctx.db)
+                .await
+                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?
+                .ok_or_else(|| JsonRpcError::internal_error("no account connected"))?;
 
         let folder = crate::db::sync_folders::SyncFolder {
             id: None,
@@ -772,13 +756,12 @@ impl Router {
             .parse()
             .map_err(|_| JsonRpcError::invalid_params("id must be a numeric string"))?;
 
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT local_path FROM sync_folders WHERE id = ?",
-        )
-        .bind(folder_id)
-        .fetch_optional(&self.ctx.db)
-        .await
-        .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT local_path FROM sync_folders WHERE id = ?")
+                .bind(folder_id)
+                .fetch_optional(&self.ctx.db)
+                .await
+                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
         let path = match row {
             Some((p,)) => p,
@@ -831,58 +814,70 @@ impl Router {
 
         info!(
             text_len = text.len(),
-            include_logs,
-            "user feedback submitted"
+            include_logs, "user feedback submitted"
         );
 
-        // TODO: persist to DB or forward to analytics endpoint when available.
+        let feedback = crate::db::feedback::Feedback {
+            id: None,
+            text: text.to_string(),
+            include_logs,
+            created_at: chrono::Utc::now().timestamp_millis(),
+        };
+        if let Err(e) = crate::db::feedback::insert_feedback(&self.ctx.db, &feedback).await {
+            warn!(error = %e, "failed to persist feedback");
+        }
+
         Ok(json!({ "submitted": true }))
     }
 
     /// Return the current OS platform name.
     fn handle_get_platform(&self) -> Result<Value, JsonRpcError> {
         #[cfg(target_os = "macos")]
-        { Ok(json!("macOS")) }
+        {
+            Ok(json!("macOS"))
+        }
         #[cfg(target_os = "linux")]
-        { Ok(json!("Linux")) }
+        {
+            Ok(json!("Linux"))
+        }
         #[cfg(target_os = "windows")]
-        { Ok(json!("Windows")) }
+        {
+            Ok(json!("Windows"))
+        }
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-        { Ok(json!("Unknown")) }
+        {
+            Ok(json!("Unknown"))
+        }
     }
 
     /// Return high-level file/folder counts from the local database.
     async fn handle_system_get_drive_stats(&self) -> Result<Value, JsonRpcError> {
-        let (file_count, folder_count) =
-            crate::db::files::count_files_and_folders(&self.ctx.db)
-                .await
-                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+        let (file_count, folder_count) = crate::db::files::count_files_and_folders(&self.ctx.db)
+            .await
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
         let stats = gdriver_ipc::DriveStats {
             file_count,
             folder_count,
         };
 
-        serde_json::to_value(stats)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(stats).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     // ── Offline handlers ─────────────────────────────────────────────────────
 
     /// Return aggregated storage stats for offline-pinned and cached files.
     async fn handle_offline_get_stats(&self) -> Result<Value, JsonRpcError> {
-        let (offline_bytes, cache_bytes) =
-            crate::db::files::sum_bytes_by_sync_state(&self.ctx.db)
-                .await
-                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+        let (offline_bytes, cache_bytes) = crate::db::files::sum_bytes_by_sync_state(&self.ctx.db)
+            .await
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
         let stats = gdriver_ipc::OfflineStats {
             offline_bytes,
             cache_bytes,
         };
 
-        serde_json::to_value(stats)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(stats).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     /// Reset all user-pinned offline files back to `cached` state.
@@ -905,10 +900,7 @@ impl Router {
     /// overlays and context menus.  Path resolution:
     ///   1. Exact match on `drive_files.local_path`.
     ///   2. Prefix match: strip the VFS mount point and match by trailing path.
-    async fn handle_fs_get_sync_state(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fs_get_sync_state(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
 
         // Try exact local_path match first.
@@ -944,10 +936,7 @@ impl Router {
     /// When `enabled` is true the sync state is set to `offline` (pinned for
     /// offline access).  When false the state reverts to `cached` (local copy
     /// can be evicted).
-    async fn handle_fs_set_offline(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fs_set_offline(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
         let enabled = params
             .as_ref()
@@ -974,10 +963,7 @@ impl Router {
     }
 
     /// Return the Google Drive web URL for a file.
-    async fn handle_fs_get_share_link(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fs_get_share_link(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
 
         let file = resolve_file_for_path(&self.ctx, &path).await?;
@@ -990,15 +976,11 @@ impl Router {
     // ── FileProvider handlers (macOS) ───────────────────────────────────────
 
     /// Handle `fp.get_item` — return metadata for a single item.
-    async fn handle_fp_get_item(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fp_get_item(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
         let f = resolve_file_for_path(&self.ctx, &path).await?;
 
-        let is_folder =
-            f.mime_type == "application/vnd.google-apps.folder";
+        let is_folder = f.mime_type == "application/vnd.google-apps.folder";
         Ok(json!({
             "name": f.name,
             "file_id": f.id,
@@ -1015,21 +997,17 @@ impl Router {
     }
 
     /// Handle `fp.list_children` — enumerate directory contents.
-    async fn handle_fp_list_children(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fp_list_children(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
 
         // For the root path, list top-level files.
         let (parent_id, account_id) = if path == "/" {
             // Get the first account for root listing.
-            let acct: Option<String> = sqlx::query_scalar(
-                "SELECT id FROM accounts ORDER BY last_used_at DESC LIMIT 1",
-            )
-            .fetch_optional(&self.ctx.db)
-            .await
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+            let acct: Option<String> =
+                sqlx::query_scalar("SELECT id FROM accounts ORDER BY last_used_at DESC LIMIT 1")
+                    .fetch_optional(&self.ctx.db)
+                    .await
+                    .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
             let acct = acct.ok_or_else(|| JsonRpcError::not_found("no accounts configured"))?;
             (None, acct)
         } else {
@@ -1037,19 +1015,15 @@ impl Router {
             (Some(file.id), file.account_id)
         };
 
-        let children = crate::db::files::list_children(
-            &self.ctx.db,
-            parent_id.as_deref(),
-            &account_id,
-        )
-        .await
-        .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+        let children =
+            crate::db::files::list_children(&self.ctx.db, parent_id.as_deref(), &account_id)
+                .await
+                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
         let items: Vec<Value> = children
             .into_iter()
             .map(|c| {
-                let is_folder =
-                    c.mime_type == "application/vnd.google-apps.folder";
+                let is_folder = c.mime_type == "application/vnd.google-apps.folder";
                 json!({
                     "name": c.name,
                     "file_id": c.id,
@@ -1070,10 +1044,7 @@ impl Router {
     }
 
     /// Handle `fp.fetch_contents` — trigger download and return local path.
-    async fn handle_fp_fetch_contents(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fp_fetch_contents(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
         let file = resolve_file_for_path(&self.ctx, &path).await?;
 
@@ -1117,10 +1088,7 @@ impl Router {
     }
 
     /// Handle `fp.create_item` — create a new file or folder.
-    async fn handle_fp_create_item(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fp_create_item(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let params = params
             .and_then(|v| v.as_object().cloned())
             .ok_or_else(|| JsonRpcError::invalid_params("expected object"))?;
@@ -1223,10 +1191,7 @@ impl Router {
     }
 
     /// Handle `fp.modify_item` — rename or write new content.
-    async fn handle_fp_modify_item(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fp_modify_item(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let params = params
             .and_then(|v| v.as_object().cloned())
             .ok_or_else(|| JsonRpcError::invalid_params("expected object"))?;
@@ -1306,10 +1271,7 @@ impl Router {
     }
 
     /// Handle `fp.delete_item` — trash a file.
-    async fn handle_fp_delete_item(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_fp_delete_item(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let path = extract_string_param(&params, "path")?;
         let file = resolve_file_for_path(&self.ctx, &path).await?;
 
@@ -1355,10 +1317,9 @@ impl Router {
 
         let http = reqwest::Client::new();
 
-        let (auth_url, token_future) =
-            gdriver_api::auth::begin_auth_flow(oauth_config, http)
-                .await
-                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+        let (auth_url, token_future) = gdriver_api::auth::begin_auth_flow(oauth_config, http)
+            .await
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
 
         // Spawn a background task to complete the flow while the UI waits.
         let ctx = Arc::clone(&self.ctx);
@@ -1382,15 +1343,11 @@ impl Router {
         let accounts = crate::db::accounts::list_accounts(&self.ctx.db)
             .await
             .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
-        serde_json::to_value(accounts)
-            .map_err(|e| JsonRpcError::internal_error(e.to_string()))
+        serde_json::to_value(accounts).map_err(|e| JsonRpcError::internal_error(e.to_string()))
     }
 
     /// Disconnect an account: wipe tokens and DB record.
-    async fn handle_auth_disconnect(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_auth_disconnect(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let params: serde_json::Map<String, Value> = match params {
             Some(Value::Object(m)) => m,
             _ => {
@@ -1426,10 +1383,7 @@ impl Router {
     ///
     /// Currently returns the locale from the DB; will be enriched from the
     /// OAuth2 userinfo endpoint in a future milestone.
-    async fn handle_auth_get_locale(
-        &self,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_auth_get_locale(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let account_id = params
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_default();
@@ -1445,10 +1399,7 @@ impl Router {
     ///
     /// Quota is currently only persisted during the OAuth flow. A future
     /// milestone will add a periodic refresh.
-    async fn handle_auth_get_quota(
-        &self,
-        _params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    async fn handle_auth_get_quota(&self, _params: Option<Value>) -> Result<Value, JsonRpcError> {
         // For now the quota is returned as part of the account record.
         // A dedicated quota cache will be added in M5.5.
         Ok(json!({ "quota": null }))
@@ -1464,10 +1415,7 @@ impl Router {
 /// 3. Cache the access token in memory.
 /// 4. Save the account record to SQLite.
 /// 5. Push `onboarding:oauth-complete` and `account:changed` events.
-async fn complete_oauth_flow(
-    ctx: &RouterContext,
-    token_set: gdriver_api::auth::TokenSet,
-) {
+async fn complete_oauth_flow(ctx: &RouterContext, token_set: gdriver_api::auth::TokenSet) {
     let client = gdriver_api::client::DriveClient::new(&token_set.access_token);
 
     // Fetch user info so we know the account identity before persisting tokens.
@@ -1511,14 +1459,9 @@ async fn complete_oauth_flow(
         let prefs = ctx.config.read().await;
         (prefs.vfs.sync_mode, prefs.vfs.mount_point.clone())
     };
-    if let Err(e) = crate::sync::initial::initial_sync(
-        &ctx.db,
-        &account.id,
-        &client,
-        sync_mode,
-        &mount_point,
-    )
-    .await
+    if let Err(e) =
+        crate::sync::initial::initial_sync(&ctx.db, &account.id, &client, sync_mode, &mount_point)
+            .await
     {
         error!("initial sync failed for {}: {e:#}", account.id);
     }
@@ -1608,7 +1551,10 @@ mod tests {
         // Switch to Mirror. The handler updates in-memory config and sends
         // the sync command immediately; disk persistence is best-effort.
         let params = Some(serde_json::json!({ "mode": "mirror" }));
-        let result = router.dispatch("system.set_sync_mode", params).await.unwrap();
+        let result = router
+            .dispatch("system.set_sync_mode", params)
+            .await
+            .unwrap();
         assert_eq!(result["sync_mode"], "mirror");
 
         // Config should be updated in memory.
@@ -1706,16 +1652,25 @@ mod tests {
 
         // Switch to Mirror.
         let params = Some(serde_json::json!({ "mode": "mirror" }));
-        router.dispatch("system.set_sync_mode", params).await.unwrap();
+        router
+            .dispatch("system.set_sync_mode", params)
+            .await
+            .unwrap();
         sync_cmd_rx.recv().await.unwrap();
 
         // Switch to Mirror again — should still succeed and send command.
         let params = Some(serde_json::json!({ "mode": "mirror" }));
-        let result = router.dispatch("system.set_sync_mode", params).await.unwrap();
+        let result = router
+            .dispatch("system.set_sync_mode", params)
+            .await
+            .unwrap();
         assert_eq!(result["sync_mode"], "mirror");
 
         // Engine receives the command (idempotent at handler level; engine handles dedup).
         let cmd = sync_cmd_rx.recv().await.unwrap();
-        assert!(matches!(cmd, SyncCommand::SwitchMode(gdriver_ipc::SyncMode::Mirror)));
+        assert!(matches!(
+            cmd,
+            SyncCommand::SwitchMode(gdriver_ipc::SyncMode::Mirror)
+        ));
     }
 }

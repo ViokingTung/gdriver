@@ -209,41 +209,30 @@ pub async fn set_sync_state(
     account_id: &str,
     state: &str,
 ) -> anyhow::Result<()> {
-    sqlx::query(
-        "UPDATE drive_files SET sync_state = ? WHERE id = ? AND account_id = ?",
-    )
-    .bind(state)
-    .bind(id)
-    .bind(account_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE drive_files SET sync_state = ? WHERE id = ? AND account_id = ?")
+        .bind(state)
+        .bind(id)
+        .bind(account_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
 
 /// Mark the file as trashed (soft-delete).
-pub async fn mark_trashed(
-    pool: &SqlitePool,
-    id: &str,
-    account_id: &str,
-) -> anyhow::Result<()> {
-    sqlx::query(
-        "UPDATE drive_files SET is_trashed = 1 WHERE id = ? AND account_id = ?",
-    )
-    .bind(id)
-    .bind(account_id)
-    .execute(pool)
-    .await?;
+pub async fn mark_trashed(pool: &SqlitePool, id: &str, account_id: &str) -> anyhow::Result<()> {
+    sqlx::query("UPDATE drive_files SET is_trashed = 1 WHERE id = ? AND account_id = ?")
+        .bind(id)
+        .bind(account_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
 
 /// Return up to `limit` recently modified files across all accounts, excluding
 /// trashed files.  Ordered by `modified_time DESC` (most recent first).
-pub async fn list_recent_files(
-    pool: &SqlitePool,
-    limit: u32,
-) -> anyhow::Result<Vec<DriveFile>> {
+pub async fn list_recent_files(pool: &SqlitePool, limit: u32) -> anyhow::Result<Vec<DriveFile>> {
     let rows = sqlx::query_as::<_, DriveFileRow>(
         "SELECT id, account_id, name, mime_type, parent_id, size, etag, version,
                 modified_time, is_trashed, is_shared, local_path, sync_state, local_mtime
@@ -311,9 +300,7 @@ pub async fn find_file_by_relative_suffix(
 /// Count non-trashed files and folders separately.
 ///
 /// Folders are identified by `mime_type = 'application/vnd.google-apps.folder'`.
-pub async fn count_files_and_folders(
-    pool: &SqlitePool,
-) -> anyhow::Result<(u64, u64)> {
+pub async fn count_files_and_folders(pool: &SqlitePool) -> anyhow::Result<(u64, u64)> {
     let row: (i64, i64) = sqlx::query_as(
         "SELECT
             SUM(CASE WHEN mime_type != 'application/vnd.google-apps.folder' THEN 1 ELSE 0 END),
@@ -332,9 +319,7 @@ pub async fn count_files_and_folders(
 /// Returns `(offline_bytes, cache_bytes)` where:
 /// - `offline_bytes`: total size of files pinned for offline access (`sync_state = 'offline'`)
 /// - `cache_bytes`: total size of files cached locally (`sync_state = 'cached'`)
-pub async fn sum_bytes_by_sync_state(
-    pool: &SqlitePool,
-) -> anyhow::Result<(u64, u64)> {
+pub async fn sum_bytes_by_sync_state(pool: &SqlitePool) -> anyhow::Result<(u64, u64)> {
     let row: (i64, i64) = sqlx::query_as(
         "SELECT
             COALESCE(SUM(CASE WHEN sync_state = 'offline' THEN size ELSE 0 END), 0),
@@ -352,8 +337,9 @@ pub async fn sum_bytes_by_sync_state(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     async fn test_pool() -> SqlitePool {
         let opts = SqliteConnectOptions::new()
@@ -453,9 +439,7 @@ mod tests {
     #[tokio::test]
     async fn get_by_id_nonexistent_returns_none() {
         let pool = test_pool().await;
-        let result = get_file_by_id(&pool, "nobody", "acct-1")
-            .await
-            .unwrap();
+        let result = get_file_by_id(&pool, "nobody", "acct-1").await.unwrap();
         assert!(result.is_none());
     }
 
@@ -467,9 +451,7 @@ mod tests {
         upsert_file(&pool, &f).await.unwrap();
 
         // Same file id but different account should not match
-        let result = get_file_by_id(&pool, "file-3", "acct-2")
-            .await
-            .unwrap();
+        let result = get_file_by_id(&pool, "file-3", "acct-2").await.unwrap();
         assert!(result.is_none());
     }
 
@@ -531,9 +513,7 @@ mod tests {
         .await
         .unwrap();
 
-        let children = list_children(&pool, Some("root"), "acct-1")
-            .await
-            .unwrap();
+        let children = list_children(&pool, Some("root"), "acct-1").await.unwrap();
         assert_eq!(children.len(), 2);
         assert_eq!(children[0].name, "alpha.txt");
         assert_eq!(children[1].name, "beta.txt");
@@ -690,9 +670,12 @@ mod tests {
         .await
         .unwrap();
 
-        upsert_file(&pool, &make_file("file-c", "acct-cascade", "gone.txt", None))
-            .await
-            .unwrap();
+        upsert_file(
+            &pool,
+            &make_file("file-c", "acct-cascade", "gone.txt", None),
+        )
+        .await
+        .unwrap();
 
         // Delete account → file should be cascade-deleted
         sqlx::query("DELETE FROM accounts WHERE id = ?")
@@ -838,7 +821,14 @@ mod tests {
         let pool = test_pool().await;
         insert_account(&pool, "acct-1").await;
 
-        for state in &["cloud_only", "synced", "downloading", "uploading", "modified", "error"] {
+        for state in &[
+            "cloud_only",
+            "synced",
+            "downloading",
+            "uploading",
+            "modified",
+            "error",
+        ] {
             let mut f = make_file(
                 &format!("f-{state}"),
                 "acct-1",

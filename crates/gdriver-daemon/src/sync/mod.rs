@@ -1,4 +1,5 @@
 pub mod conflict;
+pub mod deleter;
 pub mod downloader;
 pub mod engine;
 pub mod incremental;

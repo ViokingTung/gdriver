@@ -5,10 +5,9 @@
 //! handler methods (or the sync engine) can call.
 
 use chrono::Utc;
-use sqlx::SqlitePool;
-
 use gdriver_api::client::DriveClient;
 use gdriver_ipc::{Account, StorageQuota};
+use sqlx::SqlitePool;
 
 use crate::db;
 
@@ -44,10 +43,8 @@ pub async fn fetch_and_store_account(
         limit: gdriver_api::files::parse_quota_number(&about.storage_quota.limit).ok(),
         usage: gdriver_api::files::parse_quota_number(&Some(about.storage_quota.usage))
             .unwrap_or(0),
-        usage_in_drive: gdriver_api::files::parse_quota_number(
-            &about.storage_quota.usage_in_drive,
-        )
-        .unwrap_or(0),
+        usage_in_drive: gdriver_api::files::parse_quota_number(&about.storage_quota.usage_in_drive)
+            .unwrap_or(0),
         usage_in_drive_trash: gdriver_api::files::parse_quota_number(
             &about.storage_quota.usage_in_drive_trash,
         )
@@ -69,18 +66,35 @@ pub async fn fetch_and_store_account(
 
 #[cfg(test)]
 mod tests {
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
     use super::*;
 
-    fn test_db() -> SqlitePool {
-        // Use the accounts test helpers
-        unimplemented!("integration tests with real About API need credentials")
+    async fn test_pool() -> SqlitePool {
+        let opts = SqliteConnectOptions::new()
+            .filename(":memory:")
+            .foreign_keys(true);
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .expect("in-memory pool");
+
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
+
+        pool
     }
 
-    #[test]
-    fn account_id_is_email() {
+    #[tokio::test]
+    async fn account_id_is_email() {
         // Verify the design decision: account.id == the Google email address.
         // This test is documentation-as-code — if we change the ID strategy,
         // this test must be updated.
+        let _pool = test_pool().await;
         let email = "user@gmail.com";
         let acct = Account {
             id: email.into(),

@@ -257,7 +257,10 @@ mod tests {
             ..SyncTask::new("a", "upload")
         };
         assert_eq!(compare_priority(&older, &newer), std::cmp::Ordering::Less);
-        assert_eq!(compare_priority(&newer, &older), std::cmp::Ordering::Greater);
+        assert_eq!(
+            compare_priority(&newer, &older),
+            std::cmp::Ordering::Greater
+        );
     }
 
     #[test]

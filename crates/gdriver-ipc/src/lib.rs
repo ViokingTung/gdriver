@@ -8,10 +8,7 @@ pub use types::*;
 mod tests {
     use serde_json::{json, Value};
 
-    use crate::{
-        methods::*,
-        types::*,
-    };
+    use crate::{methods::*, types::*};
 
     // ── JSON-RPC protocol round-trips ────────────────────────────────────────
 
@@ -94,7 +91,11 @@ mod tests {
 
     #[test]
     fn appearance_roundtrip() {
-        for v in [Appearance::Light, Appearance::Dark, Appearance::FollowSystem] {
+        for v in [
+            Appearance::Light,
+            Appearance::Dark,
+            Appearance::FollowSystem,
+        ] {
             let s = serde_json::to_string(&v).unwrap();
             let back: Appearance = serde_json::from_str(&s).unwrap();
             assert_eq!(v, back);
@@ -149,7 +150,9 @@ mod tests {
             account_id: None,
             is_read: false,
             created_at: 1_700_000_000_000,
-            kind: NotificationKind::StorageWarning { usage_percent: 95.5 },
+            kind: NotificationKind::StorageWarning {
+                usage_percent: 95.5,
+            },
         };
         let json = serde_json::to_string(&notif).unwrap();
         let back: Notification = serde_json::from_str(&json).unwrap();
@@ -193,7 +196,9 @@ mod tests {
 
     #[test]
     fn oauth_complete_event_roundtrip() {
-        let payload = OauthCompletePayload { account_id: "acct-001".into() };
+        let payload = OauthCompletePayload {
+            account_id: "acct-001".into(),
+        };
         let event = PushEvent::OauthComplete(payload);
         let notif = event.to_notification().unwrap();
 
@@ -208,11 +213,8 @@ mod tests {
 
     #[test]
     fn unknown_push_event_is_preserved() {
-        let back = PushEvent::from_notification(
-            "future:new-event",
-            Some(json!({"x": 42})),
-        )
-        .unwrap();
+        let back =
+            PushEvent::from_notification("future:new-event", Some(json!({"x": 42}))).unwrap();
         let PushEvent::Unknown { method, .. } = back else {
             panic!("should be Unknown");
         };

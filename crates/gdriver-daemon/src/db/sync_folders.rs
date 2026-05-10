@@ -118,8 +118,9 @@ pub async fn set_enabled(pool: &SqlitePool, id: i64, enabled: bool) -> anyhow::R
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     async fn test_pool() -> SqlitePool {
         let opts = SqliteConnectOptions::new()
@@ -187,9 +188,15 @@ mod tests {
         insert_account(&pool, "acct-1").await;
         insert_account(&pool, "acct-2").await;
 
-        add_folder(&pool, &make_folder("acct-1", "/a", "drive")).await.unwrap();
-        add_folder(&pool, &make_folder("acct-1", "/b", "photos")).await.unwrap();
-        add_folder(&pool, &make_folder("acct-2", "/c", "drive")).await.unwrap();
+        add_folder(&pool, &make_folder("acct-1", "/a", "drive"))
+            .await
+            .unwrap();
+        add_folder(&pool, &make_folder("acct-1", "/b", "photos"))
+            .await
+            .unwrap();
+        add_folder(&pool, &make_folder("acct-2", "/c", "drive"))
+            .await
+            .unwrap();
 
         let a1 = list_by_account(&pool, "acct-1").await.unwrap();
         assert_eq!(a1.len(), 2);
@@ -206,8 +213,12 @@ mod tests {
         let pool = test_pool().await;
         insert_account(&pool, "acct-1").await;
 
-        let _a = add_folder(&pool, &make_folder("acct-1", "/enabled", "drive")).await.unwrap();
-        let b = add_folder(&pool, &make_folder("acct-1", "/disabled", "drive")).await.unwrap();
+        let _a = add_folder(&pool, &make_folder("acct-1", "/enabled", "drive"))
+            .await
+            .unwrap();
+        let b = add_folder(&pool, &make_folder("acct-1", "/disabled", "drive"))
+            .await
+            .unwrap();
 
         set_enabled(&pool, b.id.unwrap(), false).await.unwrap();
 
@@ -223,7 +234,9 @@ mod tests {
         let pool = test_pool().await;
         insert_account(&pool, "acct-1").await;
 
-        let f = add_folder(&pool, &make_folder("acct-1", "/tmp/x", "drive")).await.unwrap();
+        let f = add_folder(&pool, &make_folder("acct-1", "/tmp/x", "drive"))
+            .await
+            .unwrap();
         let id = f.id.unwrap();
 
         delete_folder(&pool, id).await.unwrap();
@@ -239,7 +252,9 @@ mod tests {
         let pool = test_pool().await;
         insert_account(&pool, "acct-1").await;
 
-        let f = add_folder(&pool, &make_folder("acct-1", "/toggle", "drive")).await.unwrap();
+        let f = add_folder(&pool, &make_folder("acct-1", "/toggle", "drive"))
+            .await
+            .unwrap();
         let id = f.id.unwrap();
 
         set_enabled(&pool, id, false).await.unwrap();

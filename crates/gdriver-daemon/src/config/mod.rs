@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
-use tokio::sync::RwLock;
-use tracing::{info, warn};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 pub use gdriver_ipc::Preferences;
+use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 // ─── Config handle ────────────────────────────────────────────────────────────
 
@@ -44,7 +45,10 @@ pub fn save(prefs: &Preferences) -> anyhow::Result<()> {
 /// Load preferences from an explicit `path`.
 pub fn load_from(path: &Path) -> anyhow::Result<Preferences> {
     if !path.exists() {
-        info!("config file not found at {}, using defaults", path.display());
+        info!(
+            "config file not found at {}, using defaults",
+            path.display()
+        );
         return Ok(Preferences::default());
     }
 
@@ -57,7 +61,10 @@ pub fn load_from(path: &Path) -> anyhow::Result<Preferences> {
         Err(e) => {
             // Treat a corrupt / outdated config as if it were absent rather
             // than crashing the daemon.
-            warn!("config parse error at {} ({e}), using defaults", path.display());
+            warn!(
+                "config parse error at {} ({e}), using defaults",
+                path.display()
+            );
             Ok(Preferences::default())
         }
     }
@@ -101,8 +108,9 @@ pub fn config_path() -> anyhow::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use gdriver_ipc::Appearance;
+
+    use super::*;
 
     // Each test gets its own uniquely-named temp file to avoid conflicts when
     // tests run in parallel.
@@ -131,12 +139,21 @@ mod tests {
         assert!(toml_str.contains("[vfs]"));
 
         let parsed: Preferences = toml::from_str(&toml_str).unwrap();
-        assert_eq!(parsed.general.launch_on_login, prefs.general.launch_on_login);
+        assert_eq!(
+            parsed.general.launch_on_login,
+            prefs.general.launch_on_login
+        );
         assert_eq!(parsed.general.language, prefs.general.language);
         assert_eq!(parsed.network.proxy, prefs.network.proxy);
-        assert_eq!(parsed.network.download_rate_limit, prefs.network.download_rate_limit);
+        assert_eq!(
+            parsed.network.download_rate_limit,
+            prefs.network.download_rate_limit
+        );
         assert_eq!(parsed.hotkeys.search_key, prefs.hotkeys.search_key);
-        assert_eq!(parsed.telemetry.auto_send_diagnostics, prefs.telemetry.auto_send_diagnostics);
+        assert_eq!(
+            parsed.telemetry.auto_send_diagnostics,
+            prefs.telemetry.auto_send_diagnostics
+        );
     }
 
     #[test]
@@ -171,7 +188,10 @@ mod tests {
         save_to(&path, &prefs).unwrap();
         let loaded = load_from(&path).unwrap();
 
-        assert_eq!(loaded.general.launch_on_login, prefs.general.launch_on_login);
+        assert_eq!(
+            loaded.general.launch_on_login,
+            prefs.general.launch_on_login
+        );
         assert_eq!(loaded.general.appearance, prefs.general.appearance);
         assert_eq!(loaded.network.proxy, prefs.network.proxy);
         assert_eq!(loaded.hotkeys.search_enabled, prefs.hotkeys.search_enabled);
@@ -214,7 +234,10 @@ mod tests {
         let loaded = load_from(&path).unwrap();
         let default = Preferences::default();
 
-        assert_eq!(loaded.general.launch_on_login, default.general.launch_on_login);
+        assert_eq!(
+            loaded.general.launch_on_login,
+            default.general.launch_on_login
+        );
         assert_eq!(loaded.network.proxy, default.network.proxy);
     }
 
@@ -228,7 +251,10 @@ mod tests {
         // Should not error — returns default instead
         let loaded = load_from(&path).unwrap();
         let default = Preferences::default();
-        assert_eq!(loaded.general.launch_on_login, default.general.launch_on_login);
+        assert_eq!(
+            loaded.general.launch_on_login,
+            default.general.launch_on_login
+        );
 
         cleanup(&path);
     }

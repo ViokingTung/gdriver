@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod feedback;
 pub mod files;
 pub mod notifications;
 pub mod queue;
@@ -6,11 +7,12 @@ pub mod sync_errors;
 pub mod sync_folders;
 pub mod tokens;
 
-use std::path::PathBuf;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::SqlitePool;
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
+    SqlitePool,
+};
 use tracing::info;
 
 // ─── Public API ───────────────────────────────────────────────────────────────

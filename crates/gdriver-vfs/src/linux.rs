@@ -1,16 +1,20 @@
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::fs;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs,
+    io::{Read, Seek, SeekFrom, Write},
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use async_trait::async_trait;
 use fuser::MountOption;
 use tracing::{info, warn};
 
-use crate::backend::{VfsBackend, VfsContext, VfsHandle};
-use crate::db;
+use crate::{
+    backend::{VfsBackend, VfsContext, VfsHandle},
+    db,
+};
 
 // ─── Time-to-live constants ────────────────────────────────────────────────
 
@@ -205,12 +209,7 @@ impl fuser::Filesystem for GDriverFS {
 
     // ── getattr ────────────────────────────────────────────────────────────
 
-    fn getattr(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        reply: fuser::ReplyAttr,
-    ) {
+    fn getattr(&mut self, _req: &fuser::Request<'_>, ino: u64, reply: fuser::ReplyAttr) {
         if ino == db::ROOT_INODE {
             reply.attr(&DIR_TTL, &Self::root_attr());
             return;
@@ -262,22 +261,12 @@ impl fuser::Filesystem for GDriverFS {
         for i in offset..total_entries {
             if i == 0 {
                 // "." — current directory
-                if reply.add(
-                    ino,
-                    i + 1,
-                    fuser::FileType::Directory,
-                    ".",
-                ) {
+                if reply.add(ino, i + 1, fuser::FileType::Directory, ".") {
                     break;
                 }
             } else if i == 1 {
                 // ".." — parent directory (use parent=1 as a fallback).
-                if reply.add(
-                    db::ROOT_INODE,
-                    i + 1,
-                    fuser::FileType::Directory,
-                    "..",
-                ) {
+                if reply.add(db::ROOT_INODE, i + 1, fuser::FileType::Directory, "..") {
                     break;
                 }
             } else {
@@ -299,13 +288,7 @@ impl fuser::Filesystem for GDriverFS {
 
     // ── open ────────────────────────────────────────────────────────────────
 
-    fn open(
-        &mut self,
-        _req: &fuser::Request<'_>,
-        ino: u64,
-        flags: i32,
-        reply: fuser::ReplyOpen,
-    ) {
+    fn open(&mut self, _req: &fuser::Request<'_>, ino: u64, flags: i32, reply: fuser::ReplyOpen) {
         if ino == db::ROOT_INODE {
             reply.error(libc::EISDIR);
             return;
@@ -342,7 +325,14 @@ impl fuser::Filesystem for GDriverFS {
 
         let fh = self.next_fh;
         self.next_fh += 1;
-        self.open_files.insert(fh, OpenHandle { ino, flags, local_path });
+        self.open_files.insert(
+            fh,
+            OpenHandle {
+                ino,
+                flags,
+                local_path,
+            },
+        );
 
         reply.opened(fh, 0);
     }
@@ -446,7 +436,10 @@ impl fuser::Filesystem for GDriverFS {
         let mut file = match fs::File::open(&local_path) {
             Ok(f) => f,
             Err(e) => {
-                tracing::error!("read({ino}): failed to open local file {}: {e:#}", local_path.display());
+                tracing::error!(
+                    "read({ino}): failed to open local file {}: {e:#}",
+                    local_path.display()
+                );
                 reply.error(libc::EIO);
                 return;
             }
@@ -492,33 +485,34 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         // Determine the parent's account_id and file_id.
-        let (account_id, parent_file_id) = match self.block_on(db::get_parent_info(&self.ctx.db, parent)) {
-            Ok(Some(info)) => info,
-            Ok(None) if parent == db::ROOT_INODE => {
-                // Creating at My Drive root — find an account.
-                match self.block_on(db::get_first_account_id(&self.ctx.db)) {
-                    Ok(Some(acct)) => (acct, None),
-                    Ok(None) => {
-                        reply.error(libc::EIO);
-                        return;
-                    }
-                    Err(e) => {
-                        tracing::error!("create: get_first_account_id failed: {e:#}");
-                        reply.error(libc::EIO);
-                        return;
+        let (account_id, parent_file_id) =
+            match self.block_on(db::get_parent_info(&self.ctx.db, parent)) {
+                Ok(Some(info)) => info,
+                Ok(None) if parent == db::ROOT_INODE => {
+                    // Creating at My Drive root — find an account.
+                    match self.block_on(db::get_first_account_id(&self.ctx.db)) {
+                        Ok(Some(acct)) => (acct, None),
+                        Ok(None) => {
+                            reply.error(libc::EIO);
+                            return;
+                        }
+                        Err(e) => {
+                            tracing::error!("create: get_first_account_id failed: {e:#}");
+                            reply.error(libc::EIO);
+                            return;
+                        }
                     }
                 }
-            }
-            Ok(None) => {
-                reply.error(libc::ENOENT);
-                return;
-            }
-            Err(e) => {
-                tracing::error!("create: get_parent_info({parent}) failed: {e:#}");
-                reply.error(libc::EIO);
-                return;
-            }
-        };
+                Ok(None) => {
+                    reply.error(libc::ENOENT);
+                    return;
+                }
+                Err(e) => {
+                    tracing::error!("create: get_parent_info({parent}) failed: {e:#}");
+                    reply.error(libc::EIO);
+                    return;
+                }
+            };
 
         // Generate a temporary file ID for this locally-created file.
         let temp_file_id = format!(
@@ -563,7 +557,10 @@ impl fuser::Filesystem for GDriverFS {
 
         // Create an empty file on disk.
         if let Err(e) = fs::File::create(&local_path) {
-            tracing::error!("create: failed to create file {}: {e:#}", local_path.display());
+            tracing::error!(
+                "create: failed to create file {}: {e:#}",
+                local_path.display()
+            );
             reply.error(libc::EIO);
             return;
         }
@@ -651,7 +648,10 @@ impl fuser::Filesystem for GDriverFS {
                     .as_millis() as i64;
 
                 let _ = self.block_on(db::update_file_size_mtime(
-                    &self.ctx.db, ino, new_end, now_ms,
+                    &self.ctx.db,
+                    ino,
+                    new_end,
+                    now_ms,
                 ));
 
                 reply.written(n as u32);
@@ -767,7 +767,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         let meta = match self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -842,7 +844,9 @@ impl fuser::Filesystem for GDriverFS {
 
         // Look up the source file.
         let meta = match self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -858,7 +862,9 @@ impl fuser::Filesystem for GDriverFS {
 
         // Check that the target name doesn't already exist under newparent.
         if let Ok(Some(_)) = self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, newparent, &new_name_str,
+            &self.ctx.db,
+            newparent,
+            &new_name_str,
         )) {
             reply.error(libc::EEXIST);
             return;
@@ -937,39 +943,42 @@ impl fuser::Filesystem for GDriverFS {
 
         // Check that a file with this name doesn't already exist.
         if let Ok(Some(_)) = self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             reply.error(libc::EEXIST);
             return;
         }
 
         // Determine the parent's account_id and file_id.
-        let (account_id, parent_file_id) = match self.block_on(db::get_parent_info(&self.ctx.db, parent)) {
-            Ok(Some(info)) => info,
-            Ok(None) if parent == db::ROOT_INODE => {
-                match self.block_on(db::get_first_account_id(&self.ctx.db)) {
-                    Ok(Some(acct)) => (acct, None),
-                    Ok(None) => {
-                        reply.error(libc::EIO);
-                        return;
-                    }
-                    Err(e) => {
-                        tracing::error!("mkdir: get_first_account_id failed: {e:#}");
-                        reply.error(libc::EIO);
-                        return;
+        let (account_id, parent_file_id) =
+            match self.block_on(db::get_parent_info(&self.ctx.db, parent)) {
+                Ok(Some(info)) => info,
+                Ok(None) if parent == db::ROOT_INODE => {
+                    match self.block_on(db::get_first_account_id(&self.ctx.db)) {
+                        Ok(Some(acct)) => (acct, None),
+                        Ok(None) => {
+                            reply.error(libc::EIO);
+                            return;
+                        }
+                        Err(e) => {
+                            tracing::error!("mkdir: get_first_account_id failed: {e:#}");
+                            reply.error(libc::EIO);
+                            return;
+                        }
                     }
                 }
-            }
-            Ok(None) => {
-                reply.error(libc::ENOENT);
-                return;
-            }
-            Err(e) => {
-                tracing::error!("mkdir: get_parent_info({parent}) failed: {e:#}");
-                reply.error(libc::EIO);
-                return;
-            }
-        };
+                Ok(None) => {
+                    reply.error(libc::ENOENT);
+                    return;
+                }
+                Err(e) => {
+                    tracing::error!("mkdir: get_parent_info({parent}) failed: {e:#}");
+                    reply.error(libc::EIO);
+                    return;
+                }
+            };
 
         // Generate a temporary file ID.
         let temp_file_id = format!(
@@ -1039,7 +1048,9 @@ impl fuser::Filesystem for GDriverFS {
         };
 
         let meta = match self.block_on(db::lookup_by_parent_and_name(
-            &self.ctx.db, parent, &name_str,
+            &self.ctx.db,
+            parent,
+            &name_str,
         )) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -1150,12 +1161,13 @@ pub async fn mount_fuse(ctx: VfsContext) -> anyhow::Result<VfsHandle> {
     info!("mounting FUSE filesystem at {}", mount_point.display());
 
     let mount_point_clone = mount_point.clone();
-    let session = tokio::task::spawn_blocking(move || {
-        fuser::spawn_mount2(fs, &mount_point_clone, &options)
-    })
-    .await
-    .map_err(|e| anyhow::anyhow!("FUSE spawn task panicked: {e}"))?
-    .map_err(|e| anyhow::anyhow!("failed to mount FUSE at {}: {e}", mount_point.display()))?;
+    let session =
+        tokio::task::spawn_blocking(move || fuser::spawn_mount2(fs, &mount_point_clone, &options))
+            .await
+            .map_err(|e| anyhow::anyhow!("FUSE spawn task panicked: {e}"))?
+            .map_err(|e| {
+                anyhow::anyhow!("failed to mount FUSE at {}: {e}", mount_point.display())
+            })?;
 
     info!("FUSE filesystem mounted at {}", mount_point.display());
 
@@ -1220,8 +1232,9 @@ fn ensure_mount_point(path: &std::path::Path) -> anyhow::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     async fn test_pool() -> sqlx::SqlitePool {
         let opts = SqliteConnectOptions::new()

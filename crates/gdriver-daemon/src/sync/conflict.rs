@@ -7,14 +7,14 @@
 
 use std::path::Path;
 
+use gdriver_api::{
+    client::DriveClient,
+    files::{self, CreateFileMetadata, UploadChunkResult},
+};
 use sqlx::SqlitePool;
 use tracing::{debug, error, info, warn};
 
-use gdriver_api::client::DriveClient;
-use gdriver_api::files::{self, CreateFileMetadata, UploadChunkResult};
-
-use crate::db;
-use crate::ipc::PushSender;
+use crate::{db, ipc::PushSender};
 
 /// Files below this size use simple multipart upload.
 const RESUMABLE_THRESHOLD: u64 = 5 * 1024 * 1024; // 5 MB
@@ -65,7 +65,10 @@ pub async fn check_and_resolve(
     let db_record = match db::files::get_file_by_id(db, file_id, &task.account_id).await? {
         Some(r) => r,
         None => {
-            debug!(task_id = task.id, file_id, "no cached record; skipping conflict check");
+            debug!(
+                task_id = task.id,
+                file_id, "no cached record; skipping conflict check"
+            );
             return Ok(None);
         }
     };
@@ -83,7 +86,13 @@ pub async fn check_and_resolve(
     };
 
     // ── Fetch the current remote metadata ──────────────────────────────────
-    let remote_file = match files::files_get(client, file_id, Some("id,name,mimeType,size,etag,version,modifiedTime,trashed")).await {
+    let remote_file = match files::files_get(
+        client,
+        file_id,
+        Some("id,name,mimeType,size,etag,version,modifiedTime,trashed"),
+    )
+    .await
+    {
         Ok(f) => f,
         Err(e) => {
             warn!(task_id = task.id, file_id, error = %e, "failed to fetch remote metadata for conflict check");
@@ -114,7 +123,16 @@ pub async fn check_and_resolve(
     );
 
     // ── Resolve ────────────────────────────────────────────────────────────
-    resolve_conflict(db, client, push_tx, task, &db_record, local_path, &remote_file).await?;
+    resolve_conflict(
+        db,
+        client,
+        push_tx,
+        task,
+        &db_record,
+        local_path,
+        &remote_file,
+    )
+    .await?;
 
     Ok(Some(()))
 }
@@ -141,14 +159,22 @@ async fn resolve_conflict(
         .file_stem()
         .map(|s| s.to_string_lossy())
         .unwrap_or_else(|| std::borrow::Cow::Borrowed("Untitled"));
-    let ext = path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    let ext = path
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
 
     let conflict_name = format!("{stem} (conflict copy {ts}){ext}");
     let conflict_dir = path.parent().unwrap_or_else(|| Path::new("."));
     let conflict_path = conflict_dir.join(&conflict_name);
 
     // ── Rename local file → conflict copy ──────────────────────────────────
-    debug!(task_id, ?local_path, ?conflict_path, "renaming local to conflict copy");
+    debug!(
+        task_id,
+        ?local_path,
+        ?conflict_path,
+        "renaming local to conflict copy"
+    );
     tokio::fs::rename(local_path, &conflict_path).await?;
 
     // ── Upload conflict copy to Drive ──────────────────────────────────────
@@ -283,7 +309,8 @@ async fn upload_resumable(
         let end = std::cmp::min(offset + CHUNK_SIZE, file_len) - 1;
         let chunk = &content[offset as usize..=end as usize];
 
-        match files::files_upload_resumable_chunk(client, &uri, chunk, offset, end, file_len).await {
+        match files::files_upload_resumable_chunk(client, &uri, chunk, offset, end, file_len).await
+        {
             Ok(UploadChunkResult::Incomplete { received }) => {
                 offset = received;
             }
@@ -291,15 +318,13 @@ async fn upload_resumable(
                 result = Some(file);
                 break;
             }
-            Err(e) => {
-                match files::files_upload_resumable_query(client, &uri, file_len).await {
-                    Ok((received, _)) => {
-                        warn!(task_id, received, error = %e, "chunk failed; resuming");
-                        offset = received;
-                    }
-                    Err(_) => return Err(e),
+            Err(e) => match files::files_upload_resumable_query(client, &uri, file_len).await {
+                Ok((received, _)) => {
+                    warn!(task_id, received, error = %e, "chunk failed; resuming");
+                    offset = received;
                 }
-            }
+                Err(_) => return Err(e),
+            },
         }
     }
 
