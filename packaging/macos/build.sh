@@ -38,11 +38,13 @@ ARCH="${ARCH:-universal}"              # x86_64 | arm64 | universal
 
 SKIP_SIGN=false
 SKIP_NOTARIZE=false
+SKIP_BUILD=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --skip-sign)     SKIP_SIGN=true; shift ;;
         --skip-notarize) SKIP_NOTARIZE=true; shift ;;
+        --skip-build)    SKIP_BUILD=true; shift ;;
         --arch)          ARCH="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -349,14 +351,18 @@ main() {
     log "Project root : ${PROJECT_ROOT}"
     echo ""
 
-    # 1. Build daemon (universal or single arch)
-    build_daemon
+    if [ "${SKIP_BUILD}" = true ]; then
+        warn "Skipping build steps (--skip-build)"
+    else
+        # 1. Build daemon (universal or single arch)
+        build_daemon
 
-    # 2. Build Swift extensions
-    build_extensions
+        # 2. Build Swift extensions
+        build_extensions
 
-    # 3. Build Tauri app (generates .app and .dmg)
-    build_tauri_app
+        # 3. Build Tauri app (generates .app and .dmg)
+        build_tauri_app
+    fi
 
     # 4. Embed daemon + extensions into .app bundle
     local app_path
