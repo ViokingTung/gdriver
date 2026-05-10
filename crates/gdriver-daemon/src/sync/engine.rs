@@ -42,14 +42,11 @@ pub enum SyncCommand {
 
 use std::sync::Arc;
 
+use gdriver_ipc::{PushEvent, SyncStatusPayload};
 use sqlx::SqlitePool;
 use tokio::sync::mpsc;
 
-use crate::auth::TokenStore;
-use crate::config::ConfigHandle;
-use crate::db::queue::SyncTask;
-use crate::ipc::PushSender;
-use gdriver_ipc::{PushEvent, SyncStatusPayload};
+use crate::{auth::TokenStore, config::ConfigHandle, db::queue::SyncTask, ipc::PushSender};
 
 /// Shared resources for the sync engine main loop.
 pub struct SyncContext {
@@ -192,16 +189,10 @@ impl TokenRefresher for AccountTokenRefresher {
         let rt = self
             .tokens
             .load_refresh_token(&self.account_id)?
-            .ok_or_else(|| {
-                anyhow::anyhow!("no refresh token for {}", self.account_id)
-            })?;
+            .ok_or_else(|| anyhow::anyhow!("no refresh token for {}", self.account_id))?;
 
-        let ts = gdriver_api::auth::refresh_access_token(
-            &self.http,
-            &self.oauth_config,
-            &rt,
-        )
-        .await?;
+        let ts =
+            gdriver_api::auth::refresh_access_token(&self.http, &self.oauth_config, &rt).await?;
 
         let access_token = ts.access_token.clone();
 
@@ -219,6 +210,7 @@ impl TokenRefresher for AccountTokenRefresher {
 // ─── Main loop ────────────────────────────────────────────────────────────────
 
 use std::time::Duration;
+
 use tracing::{debug, info};
 
 /// Helper: receive from the watcher channel, or never resolve if disabled.
@@ -278,11 +270,7 @@ pub async fn run(mut ctx: SyncContext) -> anyhow::Result<()> {
 }
 
 /// Process a single command received from the IPC layer.
-async fn handle_command(
-    ctx: &mut SyncContext,
-    state: &mut SyncEngineState,
-    cmd: SyncCommand,
-) {
+async fn handle_command(ctx: &mut SyncContext, state: &mut SyncEngineState, cmd: SyncCommand) {
     match cmd {
         SyncCommand::Pause => {
             ctx.transition_to(SyncEngineState::Paused, state).await;
@@ -396,10 +384,7 @@ async fn handle_mode_switch(
 ///
 /// Clears `local_path` and resets `sync_state` to `"cloud_only"` for all
 /// non-folder, non-trashed files that have a local path set.
-async fn reset_mirror_to_stream(
-    db: &SqlitePool,
-    account_id: &str,
-) -> anyhow::Result<usize> {
+async fn reset_mirror_to_stream(db: &SqlitePool, account_id: &str) -> anyhow::Result<usize> {
     let result = sqlx::query(
         "UPDATE drive_files
          SET local_path = NULL, sync_state = 'cloud_only'
@@ -491,11 +476,7 @@ async fn handle_remote_poll(ctx: &mut SyncContext, state: &mut SyncEngineState) 
 }
 
 /// Enqueue a task produced by the local filesystem watcher.
-async fn handle_watcher_task(
-    ctx: &mut SyncContext,
-    state: &mut SyncEngineState,
-    task: SyncTask,
-) {
+async fn handle_watcher_task(ctx: &mut SyncContext, state: &mut SyncEngineState, task: SyncTask) {
     if *state == SyncEngineState::Paused {
         tracing::trace!("watcher task dropped (paused): {:?}", task.operation);
         return;
@@ -590,9 +571,7 @@ async fn process_pending_tasks(ctx: &mut SyncContext) {
                     }
                 }
 
-                if let Err(e) =
-                    crate::sync::uploader::upload_file(&ctx.db, &client, &task).await
-                {
+                if let Err(e) = crate::sync::uploader::upload_file(&ctx.db, &client, &task).await {
                     tracing::error!(task_id, error = %e, "upload processing failed");
                 }
             }
@@ -631,19 +610,32 @@ async fn process_pending_tasks(ctx: &mut SyncContext) {
                 }
             }
             "delete" => {
-                // M6.8: defer delete tasks until conflict detection is implemented.
-                tracing::debug!(task_id, "delete task deferred (not implemented)");
-                if let Some(id) = task_id {
-                    let _ =
-                        crate::db::queue::update_task_status(&ctx.db, id, "pending", None).await;
+                let client = match ctx.build_client_for_account(&task.account_id).await {
+                    Some(c) => c,
+                    None => {
+                        tracing::warn!(
+                            account_id = %task.account_id,
+                            "no valid token for delete task; deferring"
+                        );
+                        continue;
+                    }
+                };
+                if let Err(e) = crate::sync::deleter::delete_file(&ctx.db, &client, &task).await {
+                    tracing::error!(task_id, error = %e, "delete processing failed");
                 }
-                continue;
             }
             other => {
-                tracing::warn!(task_id, operation = other, "unknown operation, marking completed");
+                tracing::warn!(
+                    task_id,
+                    operation = other,
+                    "unknown operation, marking completed"
+                );
                 if let Some(id) = task_id {
                     let _ = crate::db::queue::update_task_status(
-                        &ctx.db, id, "completed", Some("unknown operation"),
+                        &ctx.db,
+                        id,
+                        "completed",
+                        Some("unknown operation"),
                     )
                     .await;
                 }
@@ -736,31 +728,37 @@ mod tests {
     async fn pause_transitions_to_paused_state() {
         let (tx, ctx) = dummy_context().await;
         let (push_tx, mut push_rx) = tokio::sync::broadcast::channel(16);
-        let ctx = SyncContext {
-            push_tx,
-            ..ctx
-        };
+        let ctx = SyncContext { push_tx, ..ctx };
 
         let ctx = std::panic::AssertUnwindSafe(ctx);
         let handle = tokio::spawn(async move { run(ctx.0).await });
 
         // Wait for the initial idle status push.
         let msg = push_rx.recv().await.unwrap();
-        assert!(msg.contains("up-to-date"), "initial push should be up-to-date, got: {msg}");
+        assert!(
+            msg.contains("up-to-date"),
+            "initial push should be up-to-date, got: {msg}"
+        );
 
         // Send pause command.
         tx.send(SyncCommand::Pause).await.unwrap();
 
         // Wait for the paused status push.
         let msg = push_rx.recv().await.unwrap();
-        assert!(msg.contains("paused"), "pause push should be paused, got: {msg}");
+        assert!(
+            msg.contains("paused"),
+            "pause push should be paused, got: {msg}"
+        );
 
         // Send resume command.
         tx.send(SyncCommand::Resume).await.unwrap();
 
         // Wait for the up-to-date (resumed) status push.
         let msg = push_rx.recv().await.unwrap();
-        assert!(msg.contains("up-to-date"), "resume push should be up-to-date, got: {msg}");
+        assert!(
+            msg.contains("up-to-date"),
+            "resume push should be up-to-date, got: {msg}"
+        );
 
         drop(tx);
         let _ = handle.await;
@@ -770,10 +768,7 @@ mod tests {
     async fn pause_is_idempotent() {
         let (tx, ctx) = dummy_context().await;
         let (push_tx, mut push_rx) = tokio::sync::broadcast::channel(16);
-        let ctx = SyncContext {
-            push_tx,
-            ..ctx
-        };
+        let ctx = SyncContext { push_tx, ..ctx };
 
         let ctx = std::panic::AssertUnwindSafe(ctx);
         let handle = tokio::spawn(async move { run(ctx.0).await });
@@ -789,7 +784,10 @@ mod tests {
         // Second pause: should NOT get another push (idempotent).
         tx.send(SyncCommand::Pause).await.unwrap();
         let result = tokio::time::timeout(Duration::from_millis(200), push_rx.recv()).await;
-        assert!(result.is_err(), "should time out — no duplicate paused push expected");
+        assert!(
+            result.is_err(),
+            "should time out — no duplicate paused push expected"
+        );
 
         drop(tx);
         let _ = handle.await;

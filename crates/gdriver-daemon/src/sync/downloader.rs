@@ -8,12 +8,10 @@
 
 use std::path::Path;
 
+use gdriver_api::{client::DriveClient, files};
 use sqlx::SqlitePool;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, warn};
-
-use gdriver_api::client::DriveClient;
-use gdriver_api::files;
 
 use crate::db;
 
@@ -40,8 +38,7 @@ pub async fn download_file(
         Some(id) => id,
         None => {
             warn!(task_id, "download task has no file_id, marking completed");
-            db::queue::update_task_status(db, task_id, "completed", Some("no file_id"))
-                .await?;
+            db::queue::update_task_status(db, task_id, "completed", Some("no file_id")).await?;
             return Ok(());
         }
     };
@@ -49,9 +46,11 @@ pub async fn download_file(
     let local_path = match task.local_path.as_deref() {
         Some(p) => p,
         None => {
-            warn!(task_id, "download task has no local_path, marking completed");
-            db::queue::update_task_status(db, task_id, "completed", Some("no local_path"))
-                .await?;
+            warn!(
+                task_id,
+                "download task has no local_path, marking completed"
+            );
+            db::queue::update_task_status(db, task_id, "completed", Some("no local_path")).await?;
             return Ok(());
         }
     };
@@ -91,10 +90,8 @@ pub async fn download_file(
             if let Err(e) = tokio::fs::rename(&tmp_path, local_path).await {
                 // Clean up the temp file on rename failure.
                 let _ = tokio::fs::remove_file(&tmp_path).await;
-                return handle_download_failure(
-                    db, task, task_id, &format!("rename failed: {e}"),
-                )
-                .await;
+                return handle_download_failure(db, task, task_id, &format!("rename failed: {e}"))
+                    .await;
             }
 
             // ── Update file metadata ───────────────────────────────────
@@ -174,7 +171,10 @@ async fn do_export(
     tmp_path: &str,
     task_id: i64,
 ) -> anyhow::Result<()> {
-    debug!(task_id, file_id, export_mime, "exporting Google Workspace file");
+    debug!(
+        task_id,
+        file_id, export_mime, "exporting Google Workspace file"
+    );
 
     let resp = files::files_export(client, file_id, export_mime).await?;
     let total = resp.content_length();

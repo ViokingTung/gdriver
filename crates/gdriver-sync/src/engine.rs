@@ -128,10 +128,7 @@ mod tests {
 
     #[test]
     fn idle_to_idle_allowed() {
-        assert!(can_transition(
-            SyncEngineState::Idle,
-            SyncEngineState::Idle
-        ));
+        assert!(can_transition(SyncEngineState::Idle, SyncEngineState::Idle));
     }
 
     #[test]

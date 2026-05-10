@@ -28,7 +28,11 @@ fn extensions_dir() -> PathBuf {
 #[test]
 fn nautilus_metadata_json_is_valid() {
     let meta_path = extensions_dir().join("nautilus").join("metadata.json");
-    assert!(meta_path.exists(), "Nautilus metadata.json not found at {:?}", meta_path);
+    assert!(
+        meta_path.exists(),
+        "Nautilus metadata.json not found at {:?}",
+        meta_path
+    );
 
     let content = std::fs::read_to_string(&meta_path).unwrap();
     let meta: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -40,19 +44,38 @@ fn nautilus_metadata_json_is_valid() {
 
     // nautilus_versions must be a non-empty array
     let versions = meta["nautilus_versions"].as_array().unwrap();
-    assert!(!versions.is_empty(), "must declare supported Nautilus versions");
+    assert!(
+        !versions.is_empty(),
+        "must declare supported Nautilus versions"
+    );
 }
 
 #[test]
 fn nautilus_makefile_exists_and_has_install_target() {
     let makefile = extensions_dir().join("nautilus").join("Makefile");
-    assert!(makefile.exists(), "Nautilus Makefile not found at {:?}", makefile);
+    assert!(
+        makefile.exists(),
+        "Nautilus Makefile not found at {:?}",
+        makefile
+    );
 
     let content = std::fs::read_to_string(&makefile).unwrap();
-    assert!(content.contains("install:"), "Makefile missing install target");
-    assert!(content.contains("uninstall:"), "Makefile missing uninstall target");
-    assert!(content.contains("gdriver_nautilus.py"), "Makefile should reference gdriver_nautilus.py");
-    assert!(content.contains("gdriver_ipc.py"), "Makefile should reference gdriver_ipc.py");
+    assert!(
+        content.contains("install:"),
+        "Makefile missing install target"
+    );
+    assert!(
+        content.contains("uninstall:"),
+        "Makefile missing uninstall target"
+    );
+    assert!(
+        content.contains("gdriver_nautilus.py"),
+        "Makefile should reference gdriver_nautilus.py"
+    );
+    assert!(
+        content.contains("gdriver_ipc.py"),
+        "Makefile should reference gdriver_ipc.py"
+    );
 }
 
 #[test]
@@ -68,8 +91,12 @@ fn nautilus_icon_files_exist() {
     let icon_dir = extensions_dir().join("nautilus").join("icons");
     assert!(icon_dir.exists(), "Nautilus icon directory not found");
 
-    let icons = ["emblem-gdriver-cloud.svg", "emblem-gdriver-synced.svg",
-                 "emblem-gdriver-syncing.svg", "emblem-gdriver-error.svg"];
+    let icons = [
+        "emblem-gdriver-cloud.svg",
+        "emblem-gdriver-synced.svg",
+        "emblem-gdriver-syncing.svg",
+        "emblem-gdriver-error.svg",
+    ];
     for icon in icons {
         let path = icon_dir.join(icon);
         assert!(path.exists(), "missing Nautilus icon: {:?}", path);
@@ -81,7 +108,11 @@ fn nautilus_icon_files_exist() {
 #[test]
 fn dolphin_metadata_json_is_valid() {
     let meta_path = extensions_dir().join("dolphin").join("metadata.json");
-    assert!(meta_path.exists(), "Dolphin metadata.json not found at {:?}", meta_path);
+    assert!(
+        meta_path.exists(),
+        "Dolphin metadata.json not found at {:?}",
+        meta_path
+    );
 
     let content = std::fs::read_to_string(&meta_path).unwrap();
     let meta: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -93,19 +124,37 @@ fn dolphin_metadata_json_is_valid() {
 
 #[test]
 fn dolphin_desktop_entry_format() {
-    let desktop_path = extensions_dir().join("dolphin").join("gdriver-dolphin.desktop");
-    assert!(desktop_path.exists(), "Dolphin desktop entry not found at {:?}", desktop_path);
+    let desktop_path = extensions_dir()
+        .join("dolphin")
+        .join("gdriver-dolphin.desktop");
+    assert!(
+        desktop_path.exists(),
+        "Dolphin desktop entry not found at {:?}",
+        desktop_path
+    );
 
     let content = std::fs::read_to_string(&desktop_path).unwrap();
 
     // Desktop entry required keys
-    assert!(content.contains("[Desktop Entry]"), "missing [Desktop Entry] header");
-    assert!(content.contains("Type=Service"), "Type must be Service for Dolphin");
+    assert!(
+        content.contains("[Desktop Entry]"),
+        "missing [Desktop Entry] header"
+    );
+    assert!(
+        content.contains("Type=Service"),
+        "Type must be Service for Dolphin"
+    );
     assert!(content.contains("ServiceTypes="), "missing ServiceTypes");
     assert!(content.contains("Actions="), "missing Actions list");
 
     // Each action must have a [Desktop Action ...] section
-    let actions = ["AvailableOffline", "OnlineOnly", "CopyLink", "ViewInDrive", "Share"];
+    let actions = [
+        "AvailableOffline",
+        "OnlineOnly",
+        "CopyLink",
+        "ViewInDrive",
+        "Share",
+    ];
     for action in actions {
         assert!(
             content.contains(&format!("[Desktop Action {}]", action)),
@@ -125,14 +174,33 @@ fn dolphin_desktop_entry_format() {
 #[test]
 fn dolphin_makefile_exists_and_has_install_target() {
     let makefile = extensions_dir().join("dolphin").join("Makefile");
-    assert!(makefile.exists(), "Dolphin Makefile not found at {:?}", makefile);
+    assert!(
+        makefile.exists(),
+        "Dolphin Makefile not found at {:?}",
+        makefile
+    );
 
     let content = std::fs::read_to_string(&makefile).unwrap();
-    assert!(content.contains("install:"), "Makefile missing install target");
-    assert!(content.contains("uninstall:"), "Makefile missing uninstall target");
-    assert!(content.contains("gdriver_dolphin_ipc.py"), "Makefile should reference gdriver_dolphin_ipc.py");
-    assert!(content.contains("gdriver_dolphin_menu.py"), "Makefile should reference gdriver_dolphin_menu.py");
-    assert!(content.contains("SERVICE_MENU_DIR"), "Makefile should reference SERVICE_MENU_DIR");
+    assert!(
+        content.contains("install:"),
+        "Makefile missing install target"
+    );
+    assert!(
+        content.contains("uninstall:"),
+        "Makefile missing uninstall target"
+    );
+    assert!(
+        content.contains("gdriver_dolphin_ipc.py"),
+        "Makefile should reference gdriver_dolphin_ipc.py"
+    );
+    assert!(
+        content.contains("gdriver_dolphin_menu.py"),
+        "Makefile should reference gdriver_dolphin_menu.py"
+    );
+    assert!(
+        content.contains("SERVICE_MENU_DIR"),
+        "Makefile should reference SERVICE_MENU_DIR"
+    );
 }
 
 #[test]
@@ -149,8 +217,12 @@ fn dolphin_icon_files_exist() {
     let icon_dir = extensions_dir().join("dolphin").join("icons");
     assert!(icon_dir.exists(), "Dolphin icon directory not found");
 
-    let icons = ["emblem-gdriver-cloud.svg", "emblem-gdriver-synced.svg",
-                 "emblem-gdriver-syncing.svg", "emblem-gdriver-error.svg"];
+    let icons = [
+        "emblem-gdriver-cloud.svg",
+        "emblem-gdriver-synced.svg",
+        "emblem-gdriver-syncing.svg",
+        "emblem-gdriver-error.svg",
+    ];
     for icon in icons {
         let path = icon_dir.join(icon);
         assert!(path.exists(), "missing Dolphin icon: {:?}", path);
@@ -162,24 +234,39 @@ fn dolphin_icon_files_exist() {
 #[test]
 fn findersync_info_plist_exists_and_valid() {
     let plist_path = extensions_dir().join("findersync").join("Info.plist");
-    assert!(plist_path.exists(), "FinderSync Info.plist not found at {:?}", plist_path);
+    assert!(
+        plist_path.exists(),
+        "FinderSync Info.plist not found at {:?}",
+        plist_path
+    );
 
     let content = std::fs::read_to_string(&plist_path).unwrap();
 
     // Basic plist structure
-    assert!(content.contains("<?xml version=\"1.0\""), "plist must be XML");
-    assert!(content.contains("<!DOCTYPE plist"), "plist must have DOCTYPE");
+    assert!(
+        content.contains("<?xml version=\"1.0\""),
+        "plist must be XML"
+    );
+    assert!(
+        content.contains("<!DOCTYPE plist"),
+        "plist must have DOCTYPE"
+    );
     assert!(content.contains("<plist version=\"1.0\">"));
 
     // Essential keys for Finder Sync extension
     assert!(content.contains("<key>CFBundleIdentifier</key>"));
     assert!(content.contains("<key>CFBundleDisplayName</key>"));
     assert!(content.contains("<key>CFBundlePackageType</key>"));
-    assert!(content.contains("<string>XPC!</string>"), "Finder Sync extension must be XPC! type");
+    assert!(
+        content.contains("<string>XPC!</string>"),
+        "Finder Sync extension must be XPC! type"
+    );
 
     // Finder Sync specific
-    assert!(content.contains("com.apple.FinderSync"),
-            "must declare NSExtensionPointIdentifier as com.apple.FinderSync");
+    assert!(
+        content.contains("com.apple.FinderSync"),
+        "must declare NSExtensionPointIdentifier as com.apple.FinderSync"
+    );
     assert!(content.contains("<key>NSExtension</key>"));
 
     // App group for sharing data with main app and daemon
@@ -189,7 +276,11 @@ fn findersync_info_plist_exists_and_valid() {
 #[test]
 fn findersync_package_swift_exists() {
     let pkg = extensions_dir().join("findersync").join("Package.swift");
-    assert!(pkg.exists(), "FinderSync Package.swift not found at {:?}", pkg);
+    assert!(
+        pkg.exists(),
+        "FinderSync Package.swift not found at {:?}",
+        pkg
+    );
 }
 
 // ── FileProvider (macOS: on-demand file fetching) ────────────────────────
@@ -197,7 +288,11 @@ fn findersync_package_swift_exists() {
 #[test]
 fn fileprovider_info_plist_exists() {
     let plist_path = extensions_dir().join("fileprovider").join("Info.plist");
-    assert!(plist_path.exists(), "FileProvider Info.plist not found at {:?}", plist_path);
+    assert!(
+        plist_path.exists(),
+        "FileProvider Info.plist not found at {:?}",
+        plist_path
+    );
 
     let content = std::fs::read_to_string(&plist_path).unwrap();
     assert!(content.contains("<plist version=\"1.0\">"));
@@ -208,7 +303,11 @@ fn fileprovider_info_plist_exists() {
 #[test]
 fn fileprovider_package_swift_exists() {
     let pkg = extensions_dir().join("fileprovider").join("Package.swift");
-    assert!(pkg.exists(), "FileProvider Package.swift not found at {:?}", pkg);
+    assert!(
+        pkg.exists(),
+        "FileProvider Package.swift not found at {:?}",
+        pkg
+    );
 }
 
 // ── Cross-platform: both Linux extensions share icon names ───────────────
@@ -251,10 +350,14 @@ fn macos_extensions_use_same_app_group() {
     let fp_content = std::fs::read_to_string(&fp_plist).unwrap();
 
     // Both reference APP_GROUP_IDENTIFIER (set via Xcode build settings)
-    assert!(finder_content.contains("APP_GROUP_IDENTIFIER"),
-            "FinderSync must reference APP_GROUP_IDENTIFIER");
-    assert!(fp_content.contains("APP_GROUP_IDENTIFIER"),
-            "FileProvider must reference APP_GROUP_IDENTIFIER");
+    assert!(
+        finder_content.contains("APP_GROUP_IDENTIFIER"),
+        "FinderSync must reference APP_GROUP_IDENTIFIER"
+    );
+    assert!(
+        fp_content.contains("APP_GROUP_IDENTIFIER"),
+        "FileProvider must reference APP_GROUP_IDENTIFIER"
+    );
 }
 
 // ── Cross-platform: all extension directories exist ──────────────────────
@@ -274,7 +377,16 @@ fn windows_shell_extension_exists() {
     // Windows Shell Extension is a Rust COM DLL crate (not a workspace member).
     // It lives in its own directory with its own Cargo.toml.
     let win_shell = extensions_dir().join("windows-shell");
-    assert!(win_shell.exists(), "Windows Shell Extension directory not found");
-    assert!(win_shell.join("Cargo.toml").exists(), "Windows Shell Extension Cargo.toml not found");
-    assert!(win_shell.join("src").join("lib.rs").exists(), "Windows Shell Extension lib.rs not found");
+    assert!(
+        win_shell.exists(),
+        "Windows Shell Extension directory not found"
+    );
+    assert!(
+        win_shell.join("Cargo.toml").exists(),
+        "Windows Shell Extension Cargo.toml not found"
+    );
+    assert!(
+        win_shell.join("src").join("lib.rs").exists(),
+        "Windows Shell Extension lib.rs not found"
+    );
 }

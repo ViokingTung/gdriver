@@ -2,12 +2,11 @@ use sqlx::SqlitePool;
 
 /// Return the stored page token for an account, or `None` if not present.
 pub async fn get_token(pool: &SqlitePool, account_id: &str) -> anyhow::Result<Option<String>> {
-    let row = sqlx::query_scalar::<_, String>(
-        "SELECT page_token FROM sync_tokens WHERE account_id = ?",
-    )
-    .bind(account_id)
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_scalar::<_, String>("SELECT page_token FROM sync_tokens WHERE account_id = ?")
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await?;
 
     Ok(row)
 }
@@ -42,8 +41,9 @@ pub async fn set_token(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     async fn test_pool() -> SqlitePool {
         let opts = SqliteConnectOptions::new()

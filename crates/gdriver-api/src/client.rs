@@ -4,13 +4,17 @@
 //! injection, 401-triggered token refresh (one attempt), and exponential
 //! backoff for 429 / 5xx responses (up to 3 retries).
 
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use anyhow::Context;
 use async_trait::async_trait;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
-use reqwest::redirect;
+use reqwest::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    redirect,
+};
 use serde::de::DeserializeOwned;
 use tracing::{debug, warn};
 
@@ -74,7 +78,10 @@ impl DriveClient {
 
     /// Return a clone of the current access token.
     pub fn access_token(&self) -> String {
-        self.access_token.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.access_token
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     // ── Public HTTP helpers ────────────────────────────────────────────────
@@ -263,9 +270,7 @@ impl DriveClient {
 
         loop {
             let token = self.access_token();
-            let req = builder
-                .try_clone()
-                .context("failed to clone request")?;
+            let req = builder.try_clone().context("failed to clone request")?;
 
             let resp = req
                 .header(AUTHORIZATION, format!("Bearer {}", token))
@@ -325,9 +330,7 @@ impl DriveClient {
 
         loop {
             let token = self.access_token();
-            let req = builder
-                .try_clone()
-                .context("failed to clone request")?;
+            let req = builder.try_clone().context("failed to clone request")?;
 
             let resp = req
                 .header(AUTHORIZATION, format!("Bearer {}", token))
@@ -394,9 +397,7 @@ impl DriveClient {
 
         loop {
             let token = self.access_token();
-            let req = builder
-                .try_clone()
-                .context("failed to clone request")?;
+            let req = builder.try_clone().context("failed to clone request")?;
 
             let resp = req
                 .header(AUTHORIZATION, format!("Bearer {}", token))
@@ -450,11 +451,15 @@ impl DriveClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use serde::{Deserialize, Serialize};
     use std::sync::Mutex;
-    use wiremock::matchers::{header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use serde::{Deserialize, Serialize};
+    use wiremock::{
+        matchers::{header, method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    use super::*;
 
     /// Simple JSON payload used across tests.
     #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -476,7 +481,10 @@ mod tests {
 
     impl CountingRefresher {
         fn new(token: &str) -> Self {
-            Self { token: token.into(), call_count: Mutex::new(0) }
+            Self {
+                token: token.into(),
+                call_count: Mutex::new(0),
+            }
         }
 
         fn call_count(&self) -> u32 {
@@ -508,8 +516,16 @@ mod tests {
             .await;
 
         let client = test_client("test-token-123");
-        let resp: Ping = client.get_json(&format!("{}/test", server.uri())).await.unwrap();
-        assert_eq!(resp, Ping { message: "ok".into() });
+        let resp: Ping = client
+            .get_json(&format!("{}/test", server.uri()))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp,
+            Ping {
+                message: "ok".into()
+            }
+        );
     }
 
     #[tokio::test]
@@ -562,7 +578,12 @@ mod tests {
 
         let client = test_client("expired-token").with_refresher(refresher.clone());
         let resp: Ping = client.get_json(&url).await.unwrap();
-        assert_eq!(resp, Ping { message: "recovered".into() });
+        assert_eq!(
+            resp,
+            Ping {
+                message: "recovered".into()
+            }
+        );
         assert_eq!(refresher.call_count(), 1);
     }
 
@@ -583,7 +604,10 @@ mod tests {
         let client = test_client("expired").with_refresher(refresher.clone());
         let result: anyhow::Result<Ping> = client.get_json(&url).await;
 
-        assert!(result.is_err(), "should fail after refresh attempt exhausted");
+        assert!(
+            result.is_err(),
+            "should fail after refresh attempt exhausted"
+        );
         assert_eq!(refresher.call_count(), 1, "refresh called exactly once");
     }
 
@@ -605,7 +629,8 @@ mod tests {
                     ResponseTemplate::new(429)
                 } else {
                     // Third call → 200
-                    ResponseTemplate::new(200).set_body_raw(r#"{"message":"finally"}"#, "application/json")
+                    ResponseTemplate::new(200)
+                        .set_body_raw(r#"{"message":"finally"}"#, "application/json")
                 }
             })
             .mount(&server)
@@ -613,7 +638,12 @@ mod tests {
 
         let client = test_client("tok");
         let resp: Ping = client.get_json(&url).await.unwrap();
-        assert_eq!(resp, Ping { message: "finally".into() });
+        assert_eq!(
+            resp,
+            Ping {
+                message: "finally".into()
+            }
+        );
     }
 
     #[tokio::test]
@@ -630,7 +660,8 @@ mod tests {
                 if n < 2 {
                     ResponseTemplate::new(503)
                 } else {
-                    ResponseTemplate::new(200).set_body_raw(r#"{"message":"recovered"}"#, "application/json")
+                    ResponseTemplate::new(200)
+                        .set_body_raw(r#"{"message":"recovered"}"#, "application/json")
                 }
             })
             .mount(&server)
@@ -659,7 +690,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("HTTP 503"), "error should mention status: {err}");
+        assert!(
+            err.contains("HTTP 503"),
+            "error should mention status: {err}"
+        );
     }
 
     // ── 4xx (non-401) is not retried ─────────────────────────────────────
@@ -767,10 +801,8 @@ mod tests {
                 if n < 2 {
                     ResponseTemplate::new(429)
                 } else {
-                    ResponseTemplate::new(200).set_body_raw(
-                        r#"{"message":"ok-after-retry"}"#,
-                        "application/json",
-                    )
+                    ResponseTemplate::new(200)
+                        .set_body_raw(r#"{"message":"ok-after-retry"}"#, "application/json")
                 }
             })
             .mount(&server)
@@ -851,10 +883,10 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/raw"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                b"binary-content".to_vec(),
-                "application/octet-stream",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(b"binary-content".to_vec(), "application/octet-stream"),
+            )
             .mount(&server)
             .await;
 

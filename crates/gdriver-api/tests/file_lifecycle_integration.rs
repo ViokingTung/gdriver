@@ -3,12 +3,13 @@
 //! Simulates the daemon's API usage pattern:
 //!   about_get → files_list → files_create → files_get → files_update → files_delete
 
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use gdriver_api::client::{DriveClient, TokenRefresher};
-use wiremock::matchers::{header, method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{header, method, path, query_param},
+    Mock, MockServer, ResponseTemplate,
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -75,16 +76,14 @@ async fn full_file_lifecycle_about_list_create_get_update_delete() {
     // 2. files_list — initial file listing
     Mock::given(method("GET"))
         .and(path("/drive/v3/files"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                format!(
-                    r#"{{"files":[{},{}],"nextPageToken":null}}"#,
-                    sample_file_json("f1", "alpha.txt", "text/plain"),
-                    sample_file_json("f2", "beta.pdf", "application/pdf"),
-                ),
-                "application/json",
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"{{"files":[{},{}],"nextPageToken":null}}"#,
+                sample_file_json("f1", "alpha.txt", "text/plain"),
+                sample_file_json("f2", "beta.pdf", "application/pdf"),
             ),
-        )
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -97,18 +96,21 @@ async fn full_file_lifecycle_about_list_create_get_update_delete() {
     // 3. files_create — create a new folder
     Mock::given(method("POST"))
         .and(path("/drive/v3/files"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("new-folder", "My Folder", "application/vnd.google-apps.folder"),
-                "application/json",
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            sample_file_json(
+                "new-folder",
+                "My Folder",
+                "application/vnd.google-apps.folder",
             ),
-        )
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
 
     let create_url = format!("{}/drive/v3/files?fields=id,name,mimeType,parents,size,version,modifiedTime,createdTime,trashed,shared,md5Checksum,webViewLink", server.uri());
-    let body = serde_json::json!({"name": "My Folder", "mimeType": "application/vnd.google-apps.folder"});
+    let body =
+        serde_json::json!({"name": "My Folder", "mimeType": "application/vnd.google-apps.folder"});
     let created: serde_json::Value = client.post_json(&create_url, &body).await.unwrap();
     assert_eq!(created["id"], "new-folder");
     assert_eq!(created["name"], "My Folder");
@@ -116,12 +118,14 @@ async fn full_file_lifecycle_about_list_create_get_update_delete() {
     // 4. files_get — read back the created file
     Mock::given(method("GET"))
         .and(path("/drive/v3/files/new-folder"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("new-folder", "My Folder", "application/vnd.google-apps.folder"),
-                "application/json",
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            sample_file_json(
+                "new-folder",
+                "My Folder",
+                "application/vnd.google-apps.folder",
             ),
-        )
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -133,12 +137,14 @@ async fn full_file_lifecycle_about_list_create_get_update_delete() {
     // 5. files_update — rename the folder
     Mock::given(method("PATCH"))
         .and(path("/drive/v3/files/new-folder"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("new-folder", "Renamed Folder", "application/vnd.google-apps.folder"),
-                "application/json",
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            sample_file_json(
+                "new-folder",
+                "Renamed Folder",
+                "application/vnd.google-apps.folder",
             ),
-        )
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -171,16 +177,14 @@ async fn files_list_pagination_with_multiple_pages() {
     Mock::given(method("GET"))
         .and(path("/drive/v3/files"))
         .and(query_param("pageToken", "page1"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                format!(
-                    r#"{{"files":[{},{}],"nextPageToken":"page2"}}"#,
-                    sample_file_json("a", "a.txt", "text/plain"),
-                    sample_file_json("b", "b.txt", "text/plain"),
-                ),
-                "application/json",
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"{{"files":[{},{}],"nextPageToken":"page2"}}"#,
+                sample_file_json("a", "a.txt", "text/plain"),
+                sample_file_json("b", "b.txt", "text/plain"),
             ),
-        )
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
@@ -189,27 +193,33 @@ async fn files_list_pagination_with_multiple_pages() {
     Mock::given(method("GET"))
         .and(path("/drive/v3/files"))
         .and(query_param("pageToken", "page2"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                format!(
-                    r#"{{"files":[{}],"nextPageToken":null}}"#,
-                    sample_file_json("c", "c.txt", "text/plain"),
-                ),
-                "application/json",
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"{{"files":[{}],"nextPageToken":null}}"#,
+                sample_file_json("c", "c.txt", "text/plain"),
             ),
-        )
+            "application/json",
+        ))
         .expect(1)
         .mount(&server)
         .await;
 
     let default_fields = "files(id,name,mimeType,parents,size,version,modifiedTime,createdTime,trashed,shared,md5Checksum,webViewLink),nextPageToken,incompleteSearch";
 
-    let page1_url = format!("{}/drive/v3/files?pageToken=page1&fields={}", server.uri(), default_fields);
+    let page1_url = format!(
+        "{}/drive/v3/files?pageToken=page1&fields={}",
+        server.uri(),
+        default_fields
+    );
     let page1: serde_json::Value = client.get_json(&page1_url).await.unwrap();
     assert_eq!(page1["files"].as_array().unwrap().len(), 2);
     assert_eq!(page1["nextPageToken"], "page2");
 
-    let page2_url = format!("{}/drive/v3/files?pageToken=page2&fields={}", server.uri(), default_fields);
+    let page2_url = format!(
+        "{}/drive/v3/files?pageToken=page2&fields={}",
+        server.uri(),
+        default_fields
+    );
     let page2: serde_json::Value = client.get_json(&page2_url).await.unwrap();
     assert_eq!(page2["files"].as_array().unwrap().len(), 1);
     assert!(page2["nextPageToken"].is_null());
@@ -270,7 +280,10 @@ struct TestRefresher {
 
 impl TestRefresher {
     fn new(token: &str) -> Self {
-        Self { token: token.into(), count: Mutex::new(0) }
+        Self {
+            token: token.into(),
+            count: Mutex::new(0),
+        }
     }
 }
 
@@ -299,12 +312,10 @@ async fn token_refresh_during_file_get_then_succeeds() {
     Mock::given(method("GET"))
         .and(path("/drive/v3/files/protected"))
         .and(header("Authorization", "Bearer fresh-token"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                sample_file_json("protected", "secret.txt", "text/plain"),
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            sample_file_json("protected", "secret.txt", "text/plain"),
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
@@ -327,14 +338,18 @@ async fn token_refresh_retried_on_429_during_list() {
             if n < 2 {
                 ResponseTemplate::new(429)
             } else {
-                ResponseTemplate::new(200).set_body_raw(r#"{"files":[],"nextPageToken":null}"#, "application/json")
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"files":[],"nextPageToken":null}"#, "application/json")
             }
         })
         .mount(&server)
         .await;
 
     let client = DriveClient::new("rate-limited");
-    let url = format!("{}/drive/v3/files?fields=files(id,name),nextPageToken", server.uri());
+    let url = format!(
+        "{}/drive/v3/files?fields=files(id,name),nextPageToken",
+        server.uri()
+    );
     let result: Result<serde_json::Value, _> = client.get_json(&url).await;
     assert!(result.is_ok());
 }

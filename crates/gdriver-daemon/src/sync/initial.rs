@@ -1,12 +1,10 @@
 //! Initial full sync: run once per account after OAuth to populate the local
 //! file metadata database.
 
+use gdriver_api::{changes, client::DriveClient, files};
+use gdriver_ipc::SyncMode;
 use sqlx::SqlitePool;
 use tracing::{debug, info, warn};
-
-use gdriver_api::client::DriveClient;
-use gdriver_api::{changes, files};
-use gdriver_ipc::SyncMode;
 
 use crate::db;
 
@@ -41,10 +39,10 @@ pub async fn initial_sync(
         page_num += 1;
         let response = files::files_list(
             client,
-            None,           // no query — fetch all files
+            None, // no query — fetch all files
             next_page_token.as_deref(),
-            Some(1000),     // max page size
-            None,           // default fields
+            Some(1000), // max page size
+            None,       // default fields
         )
         .await?;
 
@@ -53,8 +51,8 @@ pub async fn initial_sync(
 
         if response.incomplete_search == Some(true) {
             warn!(
-                account_id, page_num,
-                "initial sync: search incomplete on page"
+                account_id,
+                page_num, "initial sync: search incomplete on page"
             );
         }
 
@@ -65,8 +63,11 @@ pub async fn initial_sync(
         files_count += on_this_page;
 
         debug!(
-            account_id, page_num, on_this_page,
-            total = files_count, "initial sync: page"
+            account_id,
+            page_num,
+            on_this_page,
+            total = files_count,
+            "initial sync: page"
         );
 
         match response.next_page_token {
@@ -75,15 +76,18 @@ pub async fn initial_sync(
         }
     }
 
-    info!(account_id, total_files = files_count, "initial sync: files upserted");
+    info!(
+        account_id,
+        total_files = files_count,
+        "initial sync: files upserted"
+    );
 
     // ── Step 3: Mirror mode — enqueue downloads for all files ──────────────
     if sync_mode == SyncMode::Mirror {
         let download_count = enqueue_mirror_downloads(db, account_id, mount_point).await?;
         info!(
             account_id,
-            download_count,
-            "initial sync: mirror download tasks enqueued"
+            download_count, "initial sync: mirror download tasks enqueued"
         );
     }
 
@@ -152,11 +156,7 @@ pub(crate) async fn enqueue_mirror_downloads(
 
         // Compute the local path by walking the parent chain.
         let relative_path = resolve_relative_path(&file.id, &name_map);
-        let local_path = format!(
-            "{}/{}",
-            mount_point.trim_end_matches('/'),
-            relative_path
-        );
+        let local_path = format!("{}/{}", mount_point.trim_end_matches('/'), relative_path);
 
         // Set the local_path on the drive_file record.
         let mut updated = file.clone();
@@ -236,14 +236,8 @@ pub(crate) fn map_api_file_to_db(
             .mime_type
             .clone()
             .unwrap_or_else(|| "application/octet-stream".into()),
-        parent_id: api_file
-            .parents
-            .as_ref()
-            .and_then(|p| p.first().cloned()),
-        size: api_file
-            .size
-            .as_ref()
-            .and_then(|s| s.parse::<i64>().ok()),
+        parent_id: api_file.parents.as_ref().and_then(|p| p.first().cloned()),
+        size: api_file.size.as_ref().and_then(|s| s.parse::<i64>().ok()),
         etag: api_file.etag.clone(),
         version: api_file
             .version
@@ -272,9 +266,10 @@ fn parse_rfc3339_to_ms(s: &str) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use files::DriveFile as ApiDriveFile;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use super::*;
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -546,9 +541,7 @@ mod tests {
         crate::db::tokens::set_token(&pool, "acct-1", "init-tok-42")
             .await
             .unwrap();
-        let saved = crate::db::tokens::get_token(&pool, "acct-1")
-            .await
-            .unwrap();
+        let saved = crate::db::tokens::get_token(&pool, "acct-1").await.unwrap();
         assert_eq!(saved.as_deref(), Some("init-tok-42"));
 
         // Insert files (as initial_sync does for each page of API results).
@@ -559,7 +552,9 @@ mod tests {
         ] {
             let api = sample_api_file(id, name, parent);
             let db_file = map_api_file_to_db(&api, "acct-1");
-            crate::db::files::upsert_file(&pool, &db_file).await.unwrap();
+            crate::db::files::upsert_file(&pool, &db_file)
+                .await
+                .unwrap();
         }
 
         // Verify files are in the DB
@@ -644,7 +639,9 @@ mod tests {
         };
 
         let db_file = map_api_file_to_db(&api, "acct-1");
-        crate::db::files::upsert_file(&pool, &db_file).await.unwrap();
+        crate::db::files::upsert_file(&pool, &db_file)
+            .await
+            .unwrap();
 
         let fetched = crate::db::files::get_file_by_id(&pool, "trashed-1", "acct-1")
             .await
@@ -683,7 +680,9 @@ mod tests {
         };
 
         let db_file = map_api_file_to_db(&api, "acct-1");
-        crate::db::files::upsert_file(&pool, &db_file).await.unwrap();
+        crate::db::files::upsert_file(&pool, &db_file)
+            .await
+            .unwrap();
 
         let fetched = crate::db::files::get_file_by_id(&pool, "folder-1", "acct-1")
             .await
@@ -714,9 +713,15 @@ mod tests {
             .unwrap();
         assert_eq!(count, 2, "should enqueue downloads for both files");
 
-        let t1 = crate::db::queue::next_pending_task(&pool).await.unwrap().unwrap();
+        let t1 = crate::db::queue::next_pending_task(&pool)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(t1.operation, "download");
-        let t2 = crate::db::queue::next_pending_task(&pool).await.unwrap().unwrap();
+        let t2 = crate::db::queue::next_pending_task(&pool)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(t2.operation, "download");
     }
 
@@ -762,7 +767,9 @@ mod tests {
         let api = sample_api_file("f-cached", "cached.txt", Some("root"));
         let mut db_file = map_api_file_to_db(&api, "acct-1");
         db_file.sync_state = "cached".to_string();
-        crate::db::files::upsert_file(&pool, &db_file).await.unwrap();
+        crate::db::files::upsert_file(&pool, &db_file)
+            .await
+            .unwrap();
 
         let count = enqueue_mirror_downloads(&pool, "acct-1", "/tmp/drive")
             .await
@@ -780,7 +787,9 @@ mod tests {
         root_api.mime_type = Some("application/vnd.google-apps.folder".into());
         let mut root_db = map_api_file_to_db(&root_api, "acct-1");
         root_db.parent_id = None;
-        crate::db::files::upsert_file(&pool, &root_db).await.unwrap();
+        crate::db::files::upsert_file(&pool, &root_db)
+            .await
+            .unwrap();
 
         // subfolder under root
         let mut sub_api = sample_api_file("sub-1", "Documents", Some("root-1"));
@@ -806,6 +815,9 @@ mod tests {
             .unwrap();
         assert_eq!(task.operation, "download");
         let path = task.local_path.unwrap();
-        assert!(path.contains("report.pdf"), "path should end with filename: {path}");
+        assert!(
+            path.contains("report.pdf"),
+            "path should end with filename: {path}"
+        );
     }
 }

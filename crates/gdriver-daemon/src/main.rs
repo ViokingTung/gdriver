@@ -8,8 +8,7 @@ mod sync;
 mod vfs;
 mod watcher;
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use auth::TokenStore;
 use db::queue::SyncTask;

@@ -5,8 +5,7 @@
 
 use serde::Deserialize;
 
-use crate::client::DriveClient;
-use crate::files::DriveFile;
+use crate::{client::DriveClient, files::DriveFile};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -131,9 +130,12 @@ pub async fn changes_list(
 
 #[cfg(test)]
 mod tests {
+    use wiremock::{
+        matchers::{method, path, query_param},
+        Mock, MockServer, ResponseTemplate,
+    };
+
     use super::*;
-    use wiremock::matchers::{method, path, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_client(token: &str) -> DriveClient {
         DriveClient::new(token)
@@ -147,10 +149,10 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/drive/v3/changes/startPageToken"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                r#"{"startPageToken":"987654"}"#,
-                "application/json",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"startPageToken":"987654"}"#, "application/json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -168,10 +170,10 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/drive/v3/changes/startPageToken"))
             .and(query_param("driveId", "shared-drive-1"))
-            .respond_with(ResponseTemplate::new(200).set_body_raw(
-                r#"{"startPageToken":"42"}"#,
-                "application/json",
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"startPageToken":"42"}"#, "application/json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -335,7 +337,10 @@ mod tests {
 
         let change: Change = serde_json::from_str(json).unwrap();
         let file = change.file.unwrap();
-        assert_eq!(file.mime_type.as_deref(), Some("application/vnd.google-apps.folder"));
+        assert_eq!(
+            file.mime_type.as_deref(),
+            Some("application/vnd.google-apps.folder")
+        );
         assert_eq!(file.size, None, "folders have no size");
         assert_eq!(file.shared, Some(true));
     }

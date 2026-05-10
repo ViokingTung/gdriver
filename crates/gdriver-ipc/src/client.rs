@@ -1,27 +1,39 @@
 use std::{
     cell::RefCell,
-    io::{BufRead, BufReader, Write},
-    path::PathBuf,
+    io::Write,
     sync::atomic::{AtomicI64, Ordering},
     time::Duration,
 };
-
 #[cfg(unix)]
-use std::os::unix::net::UnixStream;
+use std::{
+    io::{BufRead, BufReader},
+    os::unix::net::UnixStream,
+    path::PathBuf,
+};
 
 #[cfg(windows)]
 mod windows_impl {
-    use std::ffi::OsStr;
-    use std::io::{self, BufRead, BufReader, Read, Write};
-    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-    use std::time::Duration;
-
-    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-    use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
-        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    use std::{
+        ffi::OsStr,
+        io::{self, BufReader, Read, Write},
+        os::windows::{
+            ffi::OsStrExt,
+            io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        },
+        time::Duration,
     };
-    use windows_sys::Win32::System::Pipes::PIPE_READMODE_BYTE;
+
+    use windows_sys::Win32::{
+        Foundation::INVALID_HANDLE_VALUE,
+        Storage::FileSystem::{
+            CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            OPEN_EXISTING,
+        },
+        System::{
+            Pipes::PIPE_READMODE_BYTE,
+            IO::{ReadFile, WriteFile},
+        },
+    };
 
     pub struct NamedPipeClient {
         reader: BufReader<PipeReader>,
@@ -40,7 +52,7 @@ mod windows_impl {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let mut bytes_read = 0;
             let result = unsafe {
-                windows_sys::Win32::Storage::FileSystem::ReadFile(
+                ReadFile(
                     self.handle.as_raw_handle() as _,
                     buf.as_mut_ptr(),
                     buf.len() as u32,
@@ -60,7 +72,7 @@ mod windows_impl {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let mut bytes_written = 0;
             let result = unsafe {
-                windows_sys::Win32::Storage::FileSystem::WriteFile(
+                WriteFile(
                     self.handle.as_raw_handle() as _,
                     buf.as_ptr(),
                     buf.len() as u32,
@@ -120,8 +132,12 @@ mod windows_impl {
             let writer_handle = handle;
 
             Ok(Self {
-                reader: BufReader::new(PipeReader { handle: reader_handle }),
-                writer: PipeWriter { handle: writer_handle },
+                reader: BufReader::new(PipeReader {
+                    handle: reader_handle,
+                }),
+                writer: PipeWriter {
+                    handle: writer_handle,
+                },
             })
         }
 

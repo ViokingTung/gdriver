@@ -13,16 +13,18 @@
 //!
 //! For convenience, [`begin_auth_flow`] orchestrates steps 1–6 in one call.
 
-use anyhow::{Context, anyhow};
+use anyhow::{anyhow, Context};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::Utc;
 use rand::RngCore;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    sync::oneshot,
+};
 use tracing::{debug, info};
 
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
@@ -47,7 +49,10 @@ pub fn generate_pkce() -> PkceChallenge {
     let digest = Sha256::digest(code_verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest.as_slice());
 
-    PkceChallenge { code_verifier, code_challenge }
+    PkceChallenge {
+        code_verifier,
+        code_challenge,
+    }
 }
 
 // ─── OAuth configuration ──────────────────────────────────────────────────────
@@ -62,11 +67,13 @@ pub struct OAuthConfig {
 impl OAuthConfig {
     /// Load credentials from `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` env vars.
     pub fn from_env() -> anyhow::Result<Self> {
-        let client_id = std::env::var("GOOGLE_CLIENT_ID")
-            .context("GOOGLE_CLIENT_ID not set")?;
-        let client_secret = std::env::var("GOOGLE_CLIENT_SECRET")
-            .context("GOOGLE_CLIENT_SECRET not set")?;
-        Ok(Self { client_id, client_secret })
+        let client_id = std::env::var("GOOGLE_CLIENT_ID").context("GOOGLE_CLIENT_ID not set")?;
+        let client_secret =
+            std::env::var("GOOGLE_CLIENT_SECRET").context("GOOGLE_CLIENT_SECRET not set")?;
+        Ok(Self {
+            client_id,
+            client_secret,
+        })
     }
 }
 
@@ -126,8 +133,8 @@ pub struct AuthCallback {
 /// Returns:
 /// - `port` — use this to construct `redirect_uri = http://127.0.0.1:{port}/callback`
 /// - `rx`   — resolves to `AuthCallback` (or an error) once the redirect arrives
-pub async fn start_callback_server()
--> anyhow::Result<(u16, oneshot::Receiver<anyhow::Result<AuthCallback>>)> {
+pub async fn start_callback_server(
+) -> anyhow::Result<(u16, oneshot::Receiver<anyhow::Result<AuthCallback>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .context("failed to bind OAuth callback listener")?;
@@ -170,10 +177,11 @@ async fn handle_callback(listener: TcpListener) -> anyhow::Result<AuthCallback> 
     }
 
     // Parse first line: "GET /callback?code=...&state=... HTTP/1.1"
-    let request_text =
-        std::str::from_utf8(&buf).context("callback request is not UTF-8")?;
-    let request_line =
-        request_text.lines().next().context("callback request is empty")?;
+    let request_text = std::str::from_utf8(&buf).context("callback request is not UTF-8")?;
+    let request_line = request_text
+        .lines()
+        .next()
+        .context("callback request is empty")?;
 
     let path = request_line
         .split_whitespace()
@@ -183,8 +191,7 @@ async fn handle_callback(listener: TcpListener) -> anyhow::Result<AuthCallback> 
     // Reconstruct a full URL so we can use the url crate's query-pair parser
     // (handles percent-decoding correctly, including %2B in authorization codes).
     let full_url = format!("http://localhost{path}");
-    let parsed =
-        reqwest::Url::parse(&full_url).context("failed to parse callback path")?;
+    let parsed = reqwest::Url::parse(&full_url).context("failed to parse callback path")?;
 
     let mut code: Option<String> = None;
     let mut state = String::new();
@@ -280,8 +287,7 @@ impl TokenSet {
 
 impl From<RawTokenResponse> for TokenSet {
     fn from(r: RawTokenResponse) -> Self {
-        let expires_at =
-            Utc::now().timestamp_millis() + r.expires_in as i64 * 1_000;
+        let expires_at = Utc::now().timestamp_millis() + r.expires_in as i64 * 1_000;
         Self {
             access_token: r.access_token,
             refresh_token: r.refresh_token,
@@ -322,8 +328,10 @@ pub async fn exchange_code(
         return Err(anyhow!("token exchange failed (HTTP {status}): {body}"));
     }
 
-    let raw: RawTokenResponse =
-        resp.json().await.context("failed to parse token exchange response")?;
+    let raw: RawTokenResponse = resp
+        .json()
+        .await
+        .context("failed to parse token exchange response")?;
     Ok(TokenSet::from(raw))
 }
 
@@ -359,8 +367,10 @@ pub async fn refresh_access_token(
         return Err(anyhow!("token refresh failed (HTTP {status}): {body}"));
     }
 
-    let mut raw: RawTokenResponse =
-        resp.json().await.context("failed to parse token refresh response")?;
+    let mut raw: RawTokenResponse = resp
+        .json()
+        .await
+        .context("failed to parse token refresh response")?;
 
     // Preserve the existing refresh token when Google does not rotate it.
     if raw.refresh_token.is_none() {
@@ -410,8 +420,14 @@ pub async fn begin_auth_flow(
             ));
         }
 
-        exchange_code(&http, &config, &callback.code, &code_verifier, &redirect_uri)
-            .await
+        exchange_code(
+            &http,
+            &config,
+            &callback.code,
+            &code_verifier,
+            &redirect_uri,
+        )
+        .await
     };
 
     Ok((auth_url, token_future))
@@ -452,7 +468,9 @@ mod tests {
         // base64url chars: A-Z a-z 0-9 - _  (no + / or padding =)
         let pkce = generate_pkce();
         assert!(
-            pkce.code_verifier.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+            pkce.code_verifier
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
             "verifier contains non-base64url characters"
         );
     }
@@ -494,8 +512,10 @@ mod tests {
 
     #[test]
     fn build_auth_url_includes_drive_and_photos_scopes() {
-        let config =
-            OAuthConfig { client_id: "cid".into(), client_secret: "cs".into() };
+        let config = OAuthConfig {
+            client_id: "cid".into(),
+            client_secret: "cs".into(),
+        };
         let pkce = generate_pkce();
         let url = build_auth_url(&config, &pkce, "http://127.0.0.1:0/callback", "st").unwrap();
 
@@ -533,7 +553,10 @@ mod tests {
             refresh_token: None,
             expires_at: Utc::now().timestamp_millis() + 3 * 60 * 1_000, // 3 min ahead
         };
-        assert!(t.should_refresh(), "should proactively refresh within 5 min window");
+        assert!(
+            t.should_refresh(),
+            "should proactively refresh within 5 min window"
+        );
     }
 
     // ── Callback server ───────────────────────────────────────────────────────
@@ -544,10 +567,9 @@ mod tests {
 
         // Simulate the browser making the OAuth redirect request.
         tokio::spawn(async move {
-            let mut stream =
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
-                    .await
-                    .unwrap();
+            let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+                .await
+                .unwrap();
             let req = "GET /callback?code=auth_code_abc&state=nonce_xyz HTTP/1.1\r\n\
                        Host: 127.0.0.1\r\n\
                        Connection: close\r\n\
@@ -569,10 +591,9 @@ mod tests {
         let (port, rx) = start_callback_server().await.unwrap();
 
         tokio::spawn(async move {
-            let mut stream =
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
-                    .await
-                    .unwrap();
+            let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+                .await
+                .unwrap();
             let req = "GET /callback?error=access_denied&state=nonce HTTP/1.1\r\n\
                        Host: 127.0.0.1\r\n\
                        Connection: close\r\n\
@@ -593,10 +614,9 @@ mod tests {
         let (port, rx) = start_callback_server().await.unwrap();
 
         tokio::spawn(async move {
-            let mut stream =
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
-                    .await
-                    .unwrap();
+            let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+                .await
+                .unwrap();
             // Authorization codes sometimes contain '/' which is percent-encoded as %2F
             let req = "GET /callback?code=4%2F0AcvDMrBa_test&state=s HTTP/1.1\r\n\
                        Host: 127.0.0.1\r\n\
@@ -658,7 +678,10 @@ mod tests {
             token_type: "Bearer".into(),
         };
         let ts = TokenSet::from(raw);
-        assert!(ts.should_refresh(), "token with 0-second lifetime should need refresh");
+        assert!(
+            ts.should_refresh(),
+            "token with 0-second lifetime should need refresh"
+        );
     }
 
     #[test]
@@ -670,7 +693,10 @@ mod tests {
             token_type: "Bearer".into(),
         };
         let ts = TokenSet::from(raw);
-        assert!(ts.should_refresh(), "token with 1s lifetime should need refresh");
+        assert!(
+            ts.should_refresh(),
+            "token with 1s lifetime should need refresh"
+        );
     }
 
     #[test]
@@ -682,6 +708,9 @@ mod tests {
             token_type: "Bearer".into(),
         };
         let ts = TokenSet::from(raw);
-        assert!(!ts.should_refresh(), "token with 2h lifetime should NOT need refresh");
+        assert!(
+            !ts.should_refresh(),
+            "token with 2h lifetime should NOT need refresh"
+        );
     }
 }

@@ -6,15 +6,15 @@
 
 use std::path::Path;
 
+use gdriver_api::{
+    client::DriveClient,
+    photos::{self, BatchCreateRequest, NewMediaItem, SimpleMediaItem},
+};
+use gdriver_ipc::{PushEvent, SyncItem, SyncState};
 use sqlx::SqlitePool;
 use tracing::{debug, error, info, warn};
 
-use gdriver_api::client::DriveClient;
-use gdriver_api::photos::{self, BatchCreateRequest, NewMediaItem, SimpleMediaItem};
-
-use crate::db;
-use crate::ipc::PushSender;
-use gdriver_ipc::{PushEvent, SyncItem, SyncState};
+use crate::{db, ipc::PushSender};
 
 /// Maximum number of retry attempts before marking the task as permanently failed.
 const MAX_RETRIES: i32 = 3;
@@ -41,9 +41,11 @@ pub async fn backup_photo(
     let local_path = match task.local_path.as_deref() {
         Some(p) => p,
         None => {
-            warn!(task_id, "photos_backup task has no local_path, marking completed");
-            db::queue::update_task_status(db, task_id, "completed", Some("no local_path"))
-                .await?;
+            warn!(
+                task_id,
+                "photos_backup task has no local_path, marking completed"
+            );
+            db::queue::update_task_status(db, task_id, "completed", Some("no local_path")).await?;
             return Ok(());
         }
     };
@@ -66,7 +68,14 @@ pub async fn backup_photo(
         .unwrap_or_else(|| "Untitled".into());
 
     // Push an "uploading" event so the UI shows progress.
-    push_item_event(push_tx, &file_name, local_path, SyncState::Uploading, None, None);
+    push_item_event(
+        push_tx,
+        &file_name,
+        local_path,
+        SyncState::Uploading,
+        None,
+        None,
+    );
 
     // ── Step 1: Upload bytes → upload token ──────────────────────────────
     let upload_token = match photos::upload_media_item_from_path(client, path).await {
@@ -78,7 +87,11 @@ pub async fn backup_photo(
         }
     };
 
-    debug!(task_id, token_len = upload_token.len(), "upload token obtained");
+    debug!(
+        task_id,
+        token_len = upload_token.len(),
+        "upload token obtained"
+    );
 
     // ── Step 2: batchCreate → media item ─────────────────────────────────
     let request = BatchCreateRequest {

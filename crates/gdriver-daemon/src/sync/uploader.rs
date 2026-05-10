@@ -6,11 +6,12 @@
 
 use std::path::Path;
 
+use gdriver_api::{
+    client::DriveClient,
+    files::{self, CreateFileMetadata, UploadChunkResult},
+};
 use sqlx::SqlitePool;
 use tracing::{debug, error, info, warn};
-
-use gdriver_api::client::DriveClient;
-use gdriver_api::files::{self, CreateFileMetadata, UploadChunkResult};
 
 use crate::db;
 
@@ -45,8 +46,7 @@ pub async fn upload_file(
         Some(p) => p,
         None => {
             warn!(task_id, "upload task has no local_path, marking completed");
-            db::queue::update_task_status(db, task_id, "completed", Some("no local_path"))
-                .await?;
+            db::queue::update_task_status(db, task_id, "completed", Some("no local_path")).await?;
             return Ok(());
         }
     };
@@ -159,7 +159,8 @@ async fn do_resumable_upload(
 
         debug!(task_id, offset, end, "uploading chunk");
 
-        match files::files_upload_resumable_chunk(client, &uri, chunk, offset, end, file_len).await {
+        match files::files_upload_resumable_chunk(client, &uri, chunk, offset, end, file_len).await
+        {
             Ok(UploadChunkResult::Incomplete { received }) => {
                 debug!(task_id, ?received, "chunk accepted");
                 offset = received;
@@ -285,6 +286,9 @@ mod tests {
 
     #[test]
     fn guess_mime_no_extension() {
-        assert_eq!(guess_mime(Path::new("Makefile")), "application/octet-stream");
+        assert_eq!(
+            guess_mime(Path::new("Makefile")),
+            "application/octet-stream"
+        );
     }
 }

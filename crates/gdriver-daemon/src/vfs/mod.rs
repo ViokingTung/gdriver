@@ -2,10 +2,9 @@
 
 use std::path::PathBuf;
 
+pub use gdriver_vfs::{VfsBackend, VfsHandle};
 use sqlx::SqlitePool;
 use tracing::info;
-
-pub use gdriver_vfs::{VfsBackend, VfsHandle};
 
 /// Guess MIME type from a filename based on its extension.
 pub fn guess_mime(name: &str) -> String {
