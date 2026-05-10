@@ -49,8 +49,8 @@
         "section": "net",
         "priority": "optional",
         "files": {
-          "../../../../packaging/linux/deb/postinst": "/usr/lib/gdriver/postinst",
-          "../../../../packaging/linux/deb/postrm": "/usr/lib/gdriver/postrm"
+          "/usr/lib/gdriver/postinst": "../../../packaging/linux/deb/postinst",
+          "/usr/lib/gdriver/postrm": "../../../packaging/linux/deb/postrm"
         }
       },
       "rpm": {
@@ -75,7 +75,7 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "languages": ["English", "SimpChinese"],
-        "template": "../../../../packaging/windows/nsis/installer.nsi"
+        "template": "../../../packaging/windows/nsis/installer.nsi"
       }
     },
     "macOS": {

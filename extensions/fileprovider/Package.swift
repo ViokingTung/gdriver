@@ -7,15 +7,14 @@ let package = Package(
         .macOS(.v12),
     ],
     products: [
-        .library(
+        .executable(
             name: "GDriverFileProvider",
-            type: .dynamic,
             targets: ["GDriverFileProvider"]
         ),
     ],
     dependencies: [],
     targets: [
-        .target(
+        .executableTarget(
             name: "GDriverFileProvider",
             path: "Sources",
             swiftSettings: [
