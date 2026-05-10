@@ -254,7 +254,7 @@ function SharedFilesCard() {
       <button
         className="text-[13px] font-medium text-app-accent hover:text-app-accent-hover"
         onClick={() => {
-          try { invoke("open_url", { url: GOOGLE_DRIVE_SHARED_WITH_ME }); } catch {}
+          try { invoke("open_url", { url: GOOGLE_DRIVE_SHARED_WITH_ME }); } catch { /* noop */ }
         }}
       >
         {t("common.view_all")}

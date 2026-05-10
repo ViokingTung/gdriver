@@ -620,9 +620,7 @@ async fn process_pending_tasks(ctx: &mut SyncContext) {
                         continue;
                     }
                 };
-                if let Err(e) =
-                    crate::sync::deleter::delete_file(&ctx.db, &client, &task).await
-                {
+                if let Err(e) = crate::sync::deleter::delete_file(&ctx.db, &client, &task).await {
                     tracing::error!(task_id, error = %e, "delete processing failed");
                 }
             }

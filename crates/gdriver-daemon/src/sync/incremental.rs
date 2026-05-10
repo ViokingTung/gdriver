@@ -287,13 +287,14 @@ async fn enqueue_download_for_change(
             return;
         }
 
-        let file_path = db_file.local_path.clone().unwrap_or_else(|| {
-            format!("{}/{}", mount_point.trim_end_matches('/'), db_file.name)
-        });
+        let file_path = db_file
+            .local_path
+            .clone()
+            .unwrap_or_else(|| format!("{}/{}", mount_point.trim_end_matches('/'), db_file.name));
 
-        let dominated = sync_folders.iter().any(|folder| {
-            folder.is_enabled && file_path.starts_with(&folder.local_path)
-        });
+        let dominated = sync_folders
+            .iter()
+            .any(|folder| folder.is_enabled && file_path.starts_with(&folder.local_path));
 
         if !dominated {
             return;

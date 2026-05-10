@@ -54,7 +54,7 @@ export default function PreferencesDialog() {
       .catch((e) => {
         console.error("[get_sync_folders] failed:", e);
       });
-    invoke<any>("get_preferences")
+    invoke<unknown>("get_preferences")
       .then((prefs) => {
         if (prefs?.vfs?.sync_mode) setSyncMode(prefs.vfs.sync_mode);
       })

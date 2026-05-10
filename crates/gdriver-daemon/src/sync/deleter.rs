@@ -42,7 +42,10 @@ pub async fn delete_file(
         // Local-originated: user deleted local file — trash on Drive.
         handle_local_delete(db, client, task, task_id, local_path).await
     } else {
-        warn!(task_id, "delete task has neither file_id nor local_path, marking completed");
+        warn!(
+            task_id,
+            "delete task has neither file_id nor local_path, marking completed"
+        );
         db::queue::update_task_status(db, task_id, "completed", Some("no file_id or local_path"))
             .await?;
         Ok(())
@@ -105,8 +108,7 @@ async fn handle_local_delete(
         None => {
             // No DB record — file was never synced. Mark completed.
             info!(task_id, path = %local_path, "no DB record for deleted local file, marking completed");
-            db::queue::update_task_status(db, task_id, "completed", Some("no DB record"))
-                .await?;
+            db::queue::update_task_status(db, task_id, "completed", Some("no DB record")).await?;
             return Ok(());
         }
     };
@@ -125,9 +127,7 @@ async fn handle_local_delete(
             info!(task_id, file_id, path = %local_path, "local delete: trashed on Drive");
             Ok(())
         }
-        Err(e) => {
-            handle_delete_failure(db, task, task_id, &format!("{e:#}")).await
-        }
+        Err(e) => handle_delete_failure(db, task, task_id, &format!("{e:#}")).await,
     }
 }
 

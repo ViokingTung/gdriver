@@ -8,7 +8,7 @@ import { useAppStore } from "./store/appStore";
 
 // Expose store in dev console for debugging (e.g. __appStore.resetOnboarding())
 if (import.meta.env.DEV) {
-  (window as any).__appStore = useAppStore;
+  (window as unknown as Record<string, unknown>).__appStore = useAppStore;
 }
 
 const queryClient = new QueryClient({

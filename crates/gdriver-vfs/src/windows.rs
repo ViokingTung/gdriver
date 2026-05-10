@@ -889,10 +889,8 @@ impl FileSystemContext for WinFspVfs {
                 return Err(NTSTATUS::STATUS_OBJECT_NAME_COLLISION);
             }
             // Soft-delete the conflicting target so the rename can proceed.
-            if let Err(e) = self.block_on(db::soft_delete_by_inode(
-                &self.ctx.db,
-                target_meta.inode,
-            )) {
+            if let Err(e) = self.block_on(db::soft_delete_by_inode(&self.ctx.db, target_meta.inode))
+            {
                 tracing::error!("rename: failed to soft-delete target: {e:#}");
                 return Err(NTSTATUS::STATUS_INTERNAL_ERROR);
             }

@@ -97,7 +97,7 @@ export default function TopBar() {
                 { label: t("topbar.menu_offline_files"), action: () => setOpenDialog("offline-files") },
                 { label: t("topbar.menu_error_list"), action: () => setOpenDialog("error-list") },
                 { label: t("topbar.menu_about"), action: () => setOpenDialog("about") },
-                { label: t("topbar.menu_help"), action: () => { try { invoke("open_url", { url: GOOGLE_DRIVE_HELP }); } catch {} } },
+                { label: t("topbar.menu_help"), action: () => { try { invoke("open_url", { url: GOOGLE_DRIVE_HELP }); } catch { /* noop */ } } },
                 { label: t("topbar.menu_send_feedback"), action: () => setOpenDialog("feedback") },
                 { separator: true },
                 { label: t("topbar.menu_quit"), action: handleQuit, danger: true },

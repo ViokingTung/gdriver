@@ -33,7 +33,7 @@ function App() {
 
   // Skip onboarding if an account is already connected.
   useEffect(() => {
-    invoke<any[]>("get_accounts")
+    invoke<unknown[]>("get_accounts")
       .then((accounts) => {
         if (accounts && accounts.length > 0) {
           setPhase("main");
