@@ -39,11 +39,11 @@ mod windows_impl {
         writer: PipeWriter,
     }
 
-    struct PipeReader {
+    pub struct PipeReader {
         handle: OwnedHandle,
     }
 
-    struct PipeWriter {
+    pub struct PipeWriter {
         handle: OwnedHandle,
     }
 
