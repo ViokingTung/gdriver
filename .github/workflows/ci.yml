@@ -66,13 +66,13 @@ jobs:
         run: cargo +nightly fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --exclude gdriver-shell-extension -- -D warnings
 
       - name: Build
-        run: cargo build --workspace
+        run: cargo build --workspace --exclude gdriver-shell-extension
 
       - name: Test (workspace)
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude gdriver-shell-extension
 
       - name: Test (daemon specific)
         run: cargo test -p gdriver-daemon -- --test-threads=1
@@ -202,7 +202,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Build (workspace minus shell/windows-extensions)
-        run: cargo build --workspace
+        run: cargo build --workspace --exclude gdriver-shell-extension
 
       - name: Build Swift extensions
         working-directory: extensions/findersync
