@@ -62,7 +62,7 @@ pub struct VfsHandle {
     /// - Linux: `fuser::BackgroundSession`
     /// - Windows: `winfsp::filesystem::FileSystemHost`
     /// - macOS: `crate::macos::XpcService` (FileProvider) or
-    ///        `fuser::BackgroundSession` (FUSE-T fallback)
+    ///   `fuser::BackgroundSession` (FUSE-T fallback)
     #[cfg(target_os = "linux")]
     pub(crate) inner: Option<fuser::BackgroundSession>,
 
