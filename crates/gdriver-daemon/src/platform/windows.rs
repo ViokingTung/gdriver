@@ -30,7 +30,7 @@ pub fn set_launch_on_login() -> Result<()> {
 
     let exe_path = current_exe_path()?;
     run_key
-        .set_string(DAEMON_NAME, &exe_path)
+        .set_value(DAEMON_NAME, &exe_path)
         .context("Failed to set registry value")?;
 
     info!("Auto-start registered: {} -> {}", DAEMON_NAME, exe_path);
@@ -67,7 +67,7 @@ pub fn is_launch_on_login_enabled() -> bool {
         Err(_) => return false,
     };
 
-    match hkcu.get_string::<String, _>(DAEMON_NAME) {
+    match hkcu.get_value::<String, _>(DAEMON_NAME) {
         Ok(_) => true,
         Err(_) => false,
     }
@@ -116,7 +116,7 @@ fn send_toast_notification(title: &str, body: &str) -> Result<()> {
     let xml = XmlDocument::new()?;
     xml.LoadXml(&HSTRING::from(&toast_xml))?;
 
-    let toast_notifier = ToastNotificationManager::CreateToastNotificationManager()?;
+    let toast_notifier = ToastNotificationManager::CreateToastNotifier()?;
     let notification = ToastNotification::CreateToastNotification(&xml)?;
     toast_notifier.Show(&notification)?;
 
@@ -128,7 +128,7 @@ fn send_toast_notification(title: &str, body: &str) -> Result<()> {
 fn send_simple_notification(title: &str, body: &str) -> Result<()> {
     use windows::{
         core::PCWSTR,
-        Win32::UI::WindowsAndMessage::{MessageBoxW, MB_ICONINFORMATION, MB_OK},
+        Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK},
     };
 
     let wide_title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
