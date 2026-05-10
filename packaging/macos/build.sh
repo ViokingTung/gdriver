@@ -238,7 +238,7 @@ build_tauri_app() {
         export CARGO_BUILD_TARGET="aarch64-apple-darwin"
     fi
 
-    cargo tauri build --bundles dmg
+    cargo tauri build --bundles app
 
     log "Tauri build complete."
 }
@@ -352,20 +352,18 @@ main() {
     echo ""
 
     if [ "${SKIP_BUILD}" = true ]; then
-        warn "Skipping build and packaging steps (--skip-build)"
-        warn "CI handles build, embed, and DMG creation separately."
-        step "=== Packaging complete (skipped) ==="
-        return 0
+        warn "Skipping build steps (--skip-build) — daemon, extensions, and Tauri app"
+        warn "CI handles the compilation; this script will embed and create DMG."
+    else
+        # 1. Build daemon (universal or single arch)
+        build_daemon
+
+        # 2. Build Swift extensions
+        build_extensions
+
+        # 3. Build Tauri app (generates .app, not .dmg)
+        build_tauri_app
     fi
-
-    # 1. Build daemon (universal or single arch)
-    build_daemon
-
-    # 2. Build Swift extensions
-    build_extensions
-
-    # 3. Build Tauri app (generates .app and .dmg)
-    build_tauri_app
 
     # 4. Embed daemon + extensions into .app bundle
     local app_path

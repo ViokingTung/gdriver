@@ -232,19 +232,24 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Build Tauri app (DMG)
+      - name: Build Tauri app
         working-directory: apps/gdriver-app
-        run: cargo tauri build --bundles dmg
+        run: cargo tauri build --bundles app
 
-      - name: Run macOS packaging helper
+      - name: Embed components & create DMG
         run: bash packaging/macos/build.sh --skip-sign --skip-notarize --skip-build
 
       - name: Collect artifacts
         run: |
           mkdir -p dist/macos
-          find target/release/bundle -name "*.dmg" \
+          find target/release/bundle/macos -name "*.dmg" \
             -exec cp {} dist/macos/ \; 2>/dev/null || true
-          find apps/gdriver-app/src-tauri/target/release/bundle -name "*.dmg" \
+          find apps/gdriver-app/src-tauri/target/release/bundle/macos -name "*.dmg" \
+            -exec cp {} dist/macos/ \; 2>/dev/null || true
+          # Fallback: also check legacy dmg path
+          find target/release/bundle/dmg -name "*.dmg" \
+            -exec cp {} dist/macos/ \; 2>/dev/null || true
+          find apps/gdriver-app/src-tauri/target/release/bundle/dmg -name "*.dmg" \
             -exec cp {} dist/macos/ \; 2>/dev/null || true
 
       - name: Generate SHA-256 checksums
