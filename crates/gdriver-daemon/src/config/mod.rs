@@ -215,12 +215,12 @@ mod tests {
         save_to(&path, &prefs).unwrap();
         let loaded = load_from(&path).unwrap();
 
-        assert_eq!(loaded.general.launch_on_login, false);
+        assert!(!loaded.general.launch_on_login);
         assert_eq!(loaded.general.appearance, Appearance::Dark);
         assert_eq!(loaded.general.language, "zh-CN");
         assert_eq!(loaded.network.upload_rate_limit, 512);
-        assert_eq!(loaded.hotkeys.search_enabled, false);
-        assert_eq!(loaded.telemetry.auto_send_diagnostics, false);
+        assert!(!loaded.hotkeys.search_enabled);
+        assert!(!loaded.telemetry.auto_send_diagnostics);
 
         cleanup(&path);
     }

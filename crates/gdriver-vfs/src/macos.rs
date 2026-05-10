@@ -1433,7 +1433,7 @@ fn ensure_fuse_mount_point(path: &std::path::Path) -> anyhow::Result<PathBuf> {
 
 // ─── Tests ────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
+#[cfg(all(test, feature = "fuse"))]
 mod tests {
     use super::*;
 

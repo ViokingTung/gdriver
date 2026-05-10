@@ -161,7 +161,7 @@ fn dolphin_desktop_entry_format() {
             "missing action section: {action}"
         );
         assert!(
-            content.contains(&format!("Name=")),
+            content.contains("Name="),
             "each action must have a Name entry"
         );
     }

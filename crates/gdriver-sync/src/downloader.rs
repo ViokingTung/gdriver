@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn max_retries_is_positive() {
-        assert!(MAX_RETRIES > 0);
+        const { assert!(MAX_RETRIES > 0) };
     }
 
     #[test]

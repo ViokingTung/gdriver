@@ -283,10 +283,12 @@ mod tests {
 
     #[test]
     fn priority_constants_are_ordered() {
-        assert!(priority::HIGHEST < priority::HIGH);
-        assert!(priority::HIGH < priority::MEDIUM);
-        assert!(priority::MEDIUM < priority::LOW);
-        assert!(priority::LOW < priority::LOWEST);
+        const {
+            assert!(priority::HIGHEST < priority::HIGH);
+            assert!(priority::HIGH < priority::MEDIUM);
+            assert!(priority::MEDIUM < priority::LOW);
+            assert!(priority::LOW < priority::LOWEST);
+        };
     }
 
     #[test]

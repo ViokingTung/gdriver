@@ -164,7 +164,7 @@ mod tests {
         let prefs = Preferences::default();
         let json = serde_json::to_string(&prefs).unwrap();
         let back: Preferences = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.general.launch_on_login, true);
+        assert!(back.general.launch_on_login);
         assert_eq!(back.general.appearance, Appearance::FollowSystem);
         assert_eq!(back.general.language, "follow_account");
         assert_eq!(back.network.download_rate_limit, 0);

@@ -37,12 +37,12 @@ pub fn detect_conflict(
 ) -> bool {
     let local_changed = db_record
         .local_mtime
-        .map_or(false, |stored| current_local_mtime_ms > stored);
+        .is_some_and(|stored| current_local_mtime_ms > stored);
 
     let remote_changed = db_record
         .etag
         .as_deref()
-        .map_or(false, |stored| stored != current_remote_etag);
+        .is_some_and(|stored| stored != current_remote_etag);
 
     local_changed && remote_changed
 }
@@ -315,7 +315,7 @@ async fn upload_resumable(
                 offset = received;
             }
             Ok(UploadChunkResult::Complete(file)) => {
-                result = Some(file);
+                result = Some(*file);
                 break;
             }
             Err(e) => match files::files_upload_resumable_query(client, &uri, file_len).await {

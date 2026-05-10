@@ -95,13 +95,13 @@ pub async fn run(
                             trace!(?key, ?event.kind, "fs event");
                             match pending.get_mut(&key) {
                                 Some(entry) => {
-                                    entry.kind = event.kind.clone();
+                                    entry.kind = event.kind;
                                 }
                                 None => {
                                     pending.insert(key.clone(), DebounceEntry {
                                         first_seen: Instant::now(),
                                         path: key.clone(),
-                                        kind: event.kind.clone(),
+                                        kind: event.kind,
                                     });
                                 }
                             }

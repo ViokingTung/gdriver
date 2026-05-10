@@ -108,7 +108,7 @@ pub enum UploadChunkResult {
     /// not yet complete (HTTP 308).
     Incomplete { received: u64 },
     /// Upload is complete; the returned [`DriveFile`] is the server metadata.
-    Complete(DriveFile),
+    Complete(Box<DriveFile>),
 }
 
 // ─── About API response types ────────────────────────────────────────────
@@ -387,7 +387,7 @@ pub async fn files_upload_resumable_chunk(
                 .json()
                 .await
                 .context("failed to deserialise completed upload response")?;
-            Ok(UploadChunkResult::Complete(file))
+            Ok(UploadChunkResult::Complete(Box::new(file)))
         }
         308 => {
             // The server received the chunk but the upload is not yet complete.
@@ -1363,7 +1363,7 @@ mod tests {
             md5_checksum: None,
             web_view_link: None,
         };
-        let result = UploadChunkResult::Complete(file);
+        let result = UploadChunkResult::Complete(Box::new(file));
         match result {
             UploadChunkResult::Complete(f) => {
                 assert_eq!(f.id.as_deref(), Some("f1"));
