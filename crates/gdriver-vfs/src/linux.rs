@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     ffi::OsStr,
     fs,
-    io::{Read, Seek, SeekFrom, Write},
+    io::{Read, Seek, SeekFrom},
     path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -76,6 +76,7 @@ impl GDriverFS {
             atime: now,
             mtime: now,
             ctime: now,
+            crtime: now,
             kind: fuser::FileType::Directory,
             perm: 0o755,
             nlink: 2,
@@ -105,6 +106,7 @@ impl GDriverFS {
             atime: now,
             mtime,
             ctime: mtime,
+            crtime: mtime,
             kind,
             perm,
             nlink,
@@ -583,6 +585,7 @@ impl fuser::Filesystem for GDriverFS {
             atime: SystemTime::now(),
             mtime: SystemTime::now(),
             ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
             kind: fuser::FileType::RegularFile,
             perm: 0o644,
             nlink: 1,
@@ -825,6 +828,7 @@ impl fuser::Filesystem for GDriverFS {
         name: &OsStr,
         newparent: u64,
         newname: &OsStr,
+        _flags: u32,
         reply: fuser::ReplyEmpty,
     ) {
         let name_str = match name.to_str() {
@@ -1017,6 +1021,7 @@ impl fuser::Filesystem for GDriverFS {
             atime: SystemTime::now(),
             mtime: UNIX_EPOCH + Duration::from_millis(now_ms),
             ctime: UNIX_EPOCH + Duration::from_millis(now_ms),
+            crtime: UNIX_EPOCH + Duration::from_millis(now_ms),
             kind: fuser::FileType::Directory,
             perm: 0o755,
             nlink: 2,
