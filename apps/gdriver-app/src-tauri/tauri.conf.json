@@ -74,7 +74,6 @@
         "installMode": "both",
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
-        "licenseFile": "../../LICENSE",
         "languages": ["English", "SimpChinese"],
         "template": "../../../packaging/windows/nsis/installer.nsi"
       }
