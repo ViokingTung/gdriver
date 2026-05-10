@@ -71,12 +71,12 @@ Section "{{product_name}}" SecMain
 
     ; --- Main application (Tauri-generated) ---
     {{#each binaries}}
-    File /a "/oname={{this}}" "{{no-escape @key}}"
+    File "/oname={{this}}" "{{{@key}}}"
     {{/each}}
 
     ; --- Resources (icons, locales, WebView2) ---
     {{#each resources}}
-    File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
+    File "/oname={{this.[1]}}" "{{{@key}}}"
     {{/each}}
 
     ; --- gdriver-daemon (sync engine) ---

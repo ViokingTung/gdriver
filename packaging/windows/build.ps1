@@ -112,12 +112,16 @@ function Invoke-TauriBuild {
 
     Pop-Location
 
-    # Find the generated installer
-    $bundleDir = "$TauriDir\target\release\bundle"
+    # Find the generated installer (Tauri outputs to workspace target dir)
+    $bundleDir = "$TargetDir\bundle"
+    if (-not (Test-Path $bundleDir)) {
+        # Fallback: check app-specific target dir
+        $bundleDir = "$TauriDir\target\release\bundle"
+    }
     if ($BuildMode -eq "msi") {
-        $installer = Get-ChildItem "$bundleDir\msi\*.msi" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $installer = Get-ChildItem "$bundleDir\msi\*.msi" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     } else {
-        $installer = Get-ChildItem "$bundleDir\nsis\*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $installer = Get-ChildItem "$bundleDir\nsis\*.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
 
     if ($installer) {
