@@ -892,7 +892,7 @@ impl fuser::Filesystem for GDriverFS {
             &self.ctx.db,
             meta.inode,
             &new_name_str,
-            new_parent_file_id.as_deref(),
+            new_parent_file_id.flatten().as_deref(),
         )) {
             tracing::error!("rename({parent}, {name_str:?}) DB error: {e:#}");
             reply.error(libc::EIO);
