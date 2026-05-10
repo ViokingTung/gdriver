@@ -150,9 +150,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/windows
-          Get-ChildItem -Path "apps/gdriver-app/src-tauri/target/release/bundle/nsis" -Filter "*.exe" |
-            Copy-Item -Destination dist/windows/
           Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Copy-Item -Destination dist/windows/
+          Get-ChildItem -Path "apps/gdriver-app/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
             Copy-Item -Destination dist/windows/
 
       - name: Generate SHA-256 checksums
