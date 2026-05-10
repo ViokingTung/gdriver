@@ -10,10 +10,7 @@
 //   - error: Red X (sync error)
 //   - uploading: Blue up arrow (file is being uploaded)
 
-use windows::{
-    core::*,
-    Win32::UI::Shell::*,
-};
+use windows::{core::*, Win32::UI::Shell::*};
 
 use crate::ipc;
 

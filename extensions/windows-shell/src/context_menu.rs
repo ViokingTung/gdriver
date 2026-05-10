@@ -19,8 +19,7 @@ use windows::{
     },
 };
 
-use crate::ipc;
-use crate::open;
+use crate::{ipc, open};
 
 // ─── Menu item IDs ─────────────────────────────────────────────────────────
 
@@ -230,13 +229,17 @@ impl IContextMenu_Impl for GDriverContextMenu {
                             let wide: Vec<u16> =
                                 link.encode_utf16().chain(std::iter::once(0)).collect();
                             let size = wide.len() * std::mem::size_of::<u16>();
-                            let hmem = GlobalAlloc(GLOBAL_ALLOC_FLAGS(GMEM_MOVEABLE.0 as u32), size);
+                            let hmem =
+                                GlobalAlloc(GLOBAL_ALLOC_FLAGS(GMEM_MOVEABLE.0 as u32), size);
                             if let Ok(ptr) = hmem {
                                 let dst = GlobalLock(ptr) as *mut u16;
                                 if !dst.is_null() {
                                     std::ptr::copy_nonoverlapping(wide.as_ptr(), dst, wide.len());
                                     GlobalUnlock(ptr);
-                                    SetClipboardData(CF_UNICODETEXT.0 as u32, Some(HANDLE(ptr as isize)));
+                                    SetClipboardData(
+                                        CF_UNICODETEXT.0 as u32,
+                                        Some(HANDLE(ptr as isize)),
+                                    );
                                 }
                             }
                             CloseClipboard();
@@ -285,8 +288,9 @@ impl IContextMenu_Impl for GDriverContextMenu {
         match flags {
             // GCS_HELPTEXTW
             6 => {
-                let dst =
-                    unsafe { std::slice::from_raw_parts_mut(name.0 as *mut u16, _cch_max as usize) };
+                let dst = unsafe {
+                    std::slice::from_raw_parts_mut(name.0 as *mut u16, _cch_max as usize)
+                };
                 let len = wide.len().min(dst.len() - 1);
                 dst[..len].copy_from_slice(&wide[..len]);
                 dst[len] = 0;
@@ -302,8 +306,9 @@ impl IContextMenu_Impl for GDriverContextMenu {
                     _ => return Ok(()),
                 };
                 let wide_verb: Vec<u16> = verb.encode_utf16().collect();
-                let dst =
-                    unsafe { std::slice::from_raw_parts_mut(name.0 as *mut u16, _cch_max as usize) };
+                let dst = unsafe {
+                    std::slice::from_raw_parts_mut(name.0 as *mut u16, _cch_max as usize)
+                };
                 let len = wide_verb.len().min(dst.len() - 1);
                 dst[..len].copy_from_slice(&wide_verb[..len]);
                 dst[len] = 0;

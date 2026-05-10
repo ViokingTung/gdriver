@@ -4,10 +4,7 @@
 // the Rust `gdriver-ipc` crate and the Python IPC clients for Linux
 // extensions.
 
-use std::{
-    io::Write,
-    time::Duration,
-};
+use std::{io::Write, time::Duration};
 
 use serde_json::Value;
 use windows::Win32::{Foundation::*, Storage::FileSystem::*};
