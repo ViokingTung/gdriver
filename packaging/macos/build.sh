@@ -352,17 +352,20 @@ main() {
     echo ""
 
     if [ "${SKIP_BUILD}" = true ]; then
-        warn "Skipping build steps (--skip-build)"
-    else
-        # 1. Build daemon (universal or single arch)
-        build_daemon
-
-        # 2. Build Swift extensions
-        build_extensions
-
-        # 3. Build Tauri app (generates .app and .dmg)
-        build_tauri_app
+        warn "Skipping build and packaging steps (--skip-build)"
+        warn "CI handles build, embed, and DMG creation separately."
+        step "=== Packaging complete (skipped) ==="
+        return 0
     fi
+
+    # 1. Build daemon (universal or single arch)
+    build_daemon
+
+    # 2. Build Swift extensions
+    build_extensions
+
+    # 3. Build Tauri app (generates .app and .dmg)
+    build_tauri_app
 
     # 4. Embed daemon + extensions into .app bundle
     local app_path

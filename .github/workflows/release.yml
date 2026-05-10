@@ -139,6 +139,13 @@ jobs:
           key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: windows-cargo-
 
+      - name: Build daemon
+        run: cargo build -p gdriver-daemon --release
+
+      - name: Build shell extension
+        working-directory: extensions/windows-shell
+        run: cargo build --release
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
