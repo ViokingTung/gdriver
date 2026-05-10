@@ -545,7 +545,7 @@ async fn process_pending_tasks(ctx: &mut SyncContext) {
 
                 // Check for conflicts before uploading (only when the file has
                 // been synced before — i.e. we have a file_id and local_path).
-                if let (Some(ref file_id), Some(ref local_path)) =
+                if let (Some(file_id), Some(local_path)) =
                     (task.file_id.as_deref(), task.local_path.as_deref())
                 {
                     match crate::sync::conflict::check_and_resolve(

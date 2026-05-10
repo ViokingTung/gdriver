@@ -11,6 +11,8 @@ default = []
 # Enable FUSE filesystem backend (Linux: always needed; macOS: optional fallback).
 # On macOS, this links against libfuse which requires the macFUSE kernel extension.
 fuse = ["dep:fuser"]
+# Enable WinFSP virtual filesystem backend (Windows only).
+winfsp-vfs = ["dep:winfsp"]
 
 [dependencies]
 gdriver-ipc = { path = "../gdriver-ipc" }
@@ -29,7 +31,7 @@ fuser = "0.14"
 libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winfsp = "0.12"
+winfsp = { version = "0.12", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 fuser = { version = "0.14", default-features = false, features = ["libfuse"], optional = true }

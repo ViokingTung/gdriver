@@ -128,7 +128,7 @@ impl GDriverFS {
         fuser::FileAttr {
             ino: meta.inode,
             size,
-            blocks: (size + 511) / 512,
+            blocks: size.div_ceil(512),
             atime: now,
             mtime,
             ctime: mtime,
@@ -619,6 +619,7 @@ impl fuser::Filesystem for GDriverFS {
         let mut file = match fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&handle.local_path)
         {
             Ok(f) => f,
@@ -637,7 +638,7 @@ impl fuser::Filesystem for GDriverFS {
 
         match std::io::Write::write(&mut file, data) {
             Ok(n) => {
-                let new_end = offset as i64 + n as i64;
+                let new_end = offset + n as i64;
                 let now_ms = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
@@ -1433,7 +1434,7 @@ fn ensure_fuse_mount_point(path: &std::path::Path) -> anyhow::Result<PathBuf> {
 
 // ─── Tests ────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
+#[cfg(all(test, feature = "fuse"))]
 mod tests {
     use super::*;
 

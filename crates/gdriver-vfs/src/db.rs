@@ -10,7 +10,10 @@
 use sqlx::SqlitePool;
 
 /// FUSE root inode (My Drive).
-pub const ROOT_INODE: u64 = 1;
+///
+/// Uses `0` because SQLite auto-assigns `rowid` starting from 1, so no real
+/// file row will ever collide with this sentinel value.
+pub const ROOT_INODE: u64 = 0;
 
 /// Minimal metadata needed by the VFS layer for every file.
 ///

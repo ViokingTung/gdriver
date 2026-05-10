@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     ffi::OsStr,
     fs,
-    io::{Read, Seek, SeekFrom, Write},
+    io::{Read, Seek, SeekFrom},
     path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -32,6 +32,7 @@ const DOWNLOAD_TIMEOUT_MS: u64 = 30_000;
 #[derive(Debug)]
 struct OpenHandle {
     ino: u64,
+    #[allow(dead_code)]
     flags: i32,
     /// Cached local file path so `write` can avoid a DB lookup on every call.
     local_path: PathBuf,
@@ -66,7 +67,7 @@ impl GDriverFS {
         tokio::runtime::Handle::current().block_on(f)
     }
 
-    /// Build `FileAttr` for the synthetic root directory (inode 1).
+    /// Build `FileAttr` for the synthetic root directory (inode 0).
     fn root_attr() -> fuser::FileAttr {
         let now = SystemTime::now();
         fuser::FileAttr {
@@ -76,6 +77,7 @@ impl GDriverFS {
             atime: now,
             mtime: now,
             ctime: now,
+            crtime: now,
             kind: fuser::FileType::Directory,
             perm: 0o755,
             nlink: 2,
@@ -101,10 +103,11 @@ impl GDriverFS {
         fuser::FileAttr {
             ino: meta.inode,
             size,
-            blocks: (size + 511) / 512,
+            blocks: size.div_ceil(512),
             atime: now,
             mtime,
             ctime: mtime,
+            crtime: mtime,
             kind,
             perm,
             nlink,
@@ -583,6 +586,7 @@ impl fuser::Filesystem for GDriverFS {
             atime: SystemTime::now(),
             mtime: SystemTime::now(),
             ctime: SystemTime::now(),
+            crtime: SystemTime::now(),
             kind: fuser::FileType::RegularFile,
             perm: 0o644,
             nlink: 1,
@@ -622,6 +626,7 @@ impl fuser::Filesystem for GDriverFS {
         let mut file = match fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&handle.local_path)
         {
             Ok(f) => f,
@@ -641,7 +646,7 @@ impl fuser::Filesystem for GDriverFS {
         match std::io::Write::write(&mut file, data) {
             Ok(n) => {
                 // Update the cached size and mtime in the DB.
-                let new_end = offset as i64 + n as i64;
+                let new_end = offset + n as i64;
                 let now_ms = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
@@ -825,6 +830,7 @@ impl fuser::Filesystem for GDriverFS {
         name: &OsStr,
         newparent: u64,
         newname: &OsStr,
+        _flags: u32,
         reply: fuser::ReplyEmpty,
     ) {
         let name_str = match name.to_str() {
@@ -888,7 +894,7 @@ impl fuser::Filesystem for GDriverFS {
             &self.ctx.db,
             meta.inode,
             &new_name_str,
-            new_parent_file_id.as_deref(),
+            new_parent_file_id.flatten().as_deref(),
         )) {
             tracing::error!("rename({parent}, {name_str:?}) DB error: {e:#}");
             reply.error(libc::EIO);
@@ -1017,6 +1023,7 @@ impl fuser::Filesystem for GDriverFS {
             atime: SystemTime::now(),
             mtime: UNIX_EPOCH + Duration::from_millis(now_ms),
             ctime: UNIX_EPOCH + Duration::from_millis(now_ms),
+            crtime: UNIX_EPOCH + Duration::from_millis(now_ms),
             kind: fuser::FileType::Directory,
             perm: 0o755,
             nlink: 2,

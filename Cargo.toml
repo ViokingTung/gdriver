@@ -7,6 +7,7 @@ members = [
     "crates/gdriver-vfs",
     "crates/gdriver-api",
     "crates/gdriver-ipc",
+    "extensions/windows-shell",
 ]
 
 [workspace.package]

@@ -203,16 +203,11 @@ fn resolve_relative_path(
     let mut segments: Vec<String> = Vec::new();
     let mut current_id = file_id.to_string();
 
-    loop {
-        match name_map.get(&current_id) {
-            Some((name, parent_id)) => {
-                segments.push(name.clone());
-                match parent_id {
-                    Some(pid) => current_id = pid.clone(),
-                    None => break, // Reached root
-                }
-            }
-            None => break, // Unknown parent — use what we have
+    while let Some((name, parent_id)) = name_map.get(&current_id) {
+        segments.push(name.clone());
+        match parent_id {
+            Some(pid) => current_id = pid.clone(),
+            None => break, // Reached root
         }
     }
 

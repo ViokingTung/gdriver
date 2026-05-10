@@ -12,28 +12,22 @@ mod context_menu;
 mod ipc;
 mod overlay;
 
-use windows::core::*;
-use windows::Win32::Foundation::*;
-use windows::Win32::System::Com::*;
-use windows::Win32::System::LibraryLoader::*;
+use std::ffi::c_void;
+
+use windows::{
+    core::*,
+    Win32::{Foundation::*, System::Com::*, UI::Shell::*},
+};
 
 // ─── DLL Exports ────────────────────────────────────────────────────────────
-//
-// These are the standard COM DLL entry points that Windows Explorer calls
-// when loading the shell extension.
 
 #[no_mangle]
-pub extern "system" fn DllMain(
-    _hinst: HINSTANCE,
-    reason: u32,
-    _reserved: *const c_void,
-) -> i32 {
+pub extern "system" fn DllMain(_hinst: HINSTANCE, reason: u32, _reserved: *const c_void) -> i32 {
     const DLL_PROCESS_ATTACH: u32 = 1;
     const DLL_PROCESS_DETACH: u32 = 0;
 
     match reason {
         DLL_PROCESS_ATTACH => {
-            // Initialize logging
             let _ = tracing_subscriber::fmt()
                 .with_env_filter("gdriver_shell=info")
                 .try_init();
@@ -42,10 +36,9 @@ pub extern "system" fn DllMain(
         _ => {}
     }
 
-    1 // TRUE
+    1
 }
 
-/// Get a class factory for the requested CLSID.
 #[no_mangle]
 pub extern "system" fn DllGetClassObject(
     clsid: *const GUID,
@@ -56,82 +49,117 @@ pub extern "system" fn DllGetClassObject(
         let clsid_ref = &*clsid;
         let iid_ref = &*iid;
 
-        // Determine which class to create based on CLSID
         let factory: Option<IClassFactory> = if *clsid_ref == overlay::CLSID_CLOUD {
-            Some(ClassFactory::new::<overlay::CloudOverlay>())
+            Some(ClassFactory::new_for::<
+                overlay::CloudOverlay,
+                IShellIconOverlayIdentifier,
+            >())
         } else if *clsid_ref == overlay::CLSID_SYNCING {
-            Some(ClassFactory::new::<overlay::SyncingOverlay>())
+            Some(ClassFactory::new_for::<
+                overlay::SyncingOverlay,
+                IShellIconOverlayIdentifier,
+            >())
         } else if *clsid_ref == overlay::CLSID_SYNCED {
-            Some(ClassFactory::new::<overlay::SyncedOverlay>())
+            Some(ClassFactory::new_for::<
+                overlay::SyncedOverlay,
+                IShellIconOverlayIdentifier,
+            >())
         } else if *clsid_ref == overlay::CLSID_ERROR {
-            Some(ClassFactory::new::<overlay::ErrorOverlay>())
+            Some(ClassFactory::new_for::<
+                overlay::ErrorOverlay,
+                IShellIconOverlayIdentifier,
+            >())
         } else if *clsid_ref == overlay::CLSID_UPLOADING {
-            Some(ClassFactory::new::<overlay::UploadingOverlay>())
+            Some(ClassFactory::new_for::<
+                overlay::UploadingOverlay,
+                IShellIconOverlayIdentifier,
+            >())
         } else if *clsid_ref == CLSID_CONTEXT_MENU {
-            Some(ClassFactory::new::<context_menu::GDriverContextMenu>())
+            Some(ClassFactory::new_for::<
+                context_menu::GDriverContextMenu,
+                IContextMenu,
+            >())
         } else {
             None
         };
 
         match factory {
-            Some(f) => {
-                let result = f.query(iid_ref, ppv);
-                f.release();
-                result
-            }
+            Some(f) => f.query(iid_ref, ppv),
             None => CLASS_E_CLASSNOTAVAILABLE,
         }
     }
 }
 
-/// Check if the DLL can be unloaded (no outstanding references).
 #[no_mangle]
 pub extern "system" fn DllCanUnloadNow() -> HRESULT {
-    // In a production implementation, we'd track reference counts.
-    // For now, always allow unload.
     S_OK
 }
 
-/// Register the shell extension entries in the Windows registry.
 #[no_mangle]
 pub extern "system" fn DllRegisterServer() -> HRESULT {
-    // This is typically handled by the installer (NSIS).
-    // The registration script is in register.reg.
     S_OK
 }
 
-/// Unregister the shell extension entries from the Windows registry.
 #[no_mangle]
 pub extern "system" fn DllUnregisterServer() -> HRESULT {
-    // This is typically handled by the uninstaller.
     S_OK
 }
-
-// ─── CLSID for the context menu handler ────────────────────────────────────
 
 const CLSID_CONTEXT_MENU: GUID = GUID::from_u128(0xA1B2C3D4_1111_2222_3333_444455556600);
 
 // ─── Class Factory ──────────────────────────────────────────────────────────
 
+#[implement(IClassFactory)]
 struct ClassFactory {
-    create_fn: fn() -> IUnknown,
-    ref_count: u32,
+    create_fn: Box<dyn Fn() -> IUnknown>,
 }
 
 impl ClassFactory {
-    fn new<T>() -> IClassFactory
+    fn new_for<T, I>() -> IClassFactory
     where
         T: Default + 'static,
-        IClassFactory: From<T>,
+        I: Interface + From<T>,
     {
-        let factory = Box::new(Self {
-            create_fn || {
+        let factory = ClassFactory {
+            create_fn: Box::new(|| {
                 let obj = T::default();
-                IClassFactory::from(obj)
-            },
-            ref_count: 1,
-        });
-        IClassFactory::from(Box::into_raw(factory))
+                let iface: I = obj.into();
+                let mut unk_ptr: *mut c_void = std::ptr::null_mut();
+                unsafe {
+                    let _ = iface.query(
+                        &IUnknown::IID as *const GUID,
+                        &mut unk_ptr as *mut *mut c_void,
+                    );
+                    Interface::from_raw(unk_ptr)
+                }
+            }),
+        };
+        factory.into()
+    }
+}
+
+impl IClassFactory_Impl for ClassFactory_Impl {
+    fn CreateInstance(
+        &self,
+        punkouter: Option<&IUnknown>,
+        riid: *const GUID,
+        ppv: *mut *mut c_void,
+    ) -> Result<()> {
+        if punkouter.is_some() {
+            return Err(Error::from_hresult(CLASS_E_NOAGGREGATION));
+        }
+
+        let inner = self.get_impl();
+        let unk = (inner.create_fn)();
+        unsafe {
+            let riid_ref = &*riid;
+            let _ = unk.query(riid_ref, ppv);
+        }
+        Ok(())
+    }
+
+    fn LockServer(&self, _flock: BOOL) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -143,9 +171,7 @@ mod open {
     pub fn that(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "windows")]
         {
-            Command::new("cmd")
-                .args(["/c", "start", "", url])
-                .spawn()?;
+            Command::new("cmd").args(["/c", "start", "", url]).spawn()?;
         }
 
         #[cfg(not(target_os = "windows"))]

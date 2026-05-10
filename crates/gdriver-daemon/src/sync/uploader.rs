@@ -167,7 +167,7 @@ async fn do_resumable_upload(
             }
             Ok(UploadChunkResult::Complete(file)) => {
                 debug!(task_id, "final chunk accepted");
-                result = Some(file);
+                result = Some(*file);
                 break;
             }
             Err(e) => {

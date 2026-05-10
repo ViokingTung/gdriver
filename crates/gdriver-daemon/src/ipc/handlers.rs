@@ -1201,7 +1201,7 @@ impl Router {
             .and_then(|v| v.as_str())
             .ok_or_else(|| JsonRpcError::invalid_params("path is required"))?;
 
-        let file = resolve_file_for_path(&self.ctx, &path).await?;
+        let file = resolve_file_for_path(&self.ctx, path).await?;
 
         let now = chrono::Utc::now().timestamp_millis();
 

@@ -1004,6 +1004,20 @@ dependencies = [
 
 [[package]]
 name = "embed-resource"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d506610004cfc74a6f5ee7e8c632b355de5eca1f03ee5e5e0ec11b77d4eb3d61"
+dependencies = [
+ "cc",
+ "memchr",
+ "rustc_version",
+ "toml 0.8.2",
+ "vswhom",
+ "winreg 0.52.0",
+]
+
+[[package]]
+name = "embed-resource"
 version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31a88c8d26de40ed18fe748c547845aa39de1db3afd958f8cb91579f3644bcb"
@@ -1554,6 +1568,19 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "gdriver-shell-extension"
+version = "0.1.0"
+dependencies = [
+ "embed-resource 2.5.2",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+ "windows 0.58.0",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -5102,7 +5129,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc65d45c68858bfe420dd29e834b5d15dbecf8a07a8a16cf4d532c7b1f69d4b6"
 dependencies = [
  "dunce",
- "embed-resource",
+ "embed-resource 3.0.9",
  "toml 1.1.2+spec-1.1.0",
 ]
 

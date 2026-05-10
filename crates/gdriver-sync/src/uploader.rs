@@ -36,7 +36,7 @@ pub fn chunk_count(file_len: u64, chunk_size: u64) -> u64 {
     if file_len == 0 {
         0
     } else {
-        (file_len + chunk_size - 1) / chunk_size
+        file_len.div_ceil(chunk_size)
     }
 }
 
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn max_retries_is_positive() {
-        assert!(MAX_RETRIES > 0);
+        const { assert!(MAX_RETRIES > 0) };
     }
 
     // ── Chunk size validation ──────────────────────────────────────────────

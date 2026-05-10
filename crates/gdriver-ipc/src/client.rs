@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use std::io::BufRead;
 use std::{
     cell::RefCell,
     io::Write,
@@ -26,13 +28,10 @@ mod windows_impl {
     use windows_sys::Win32::{
         Foundation::INVALID_HANDLE_VALUE,
         Storage::FileSystem::{
-            CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-            OPEN_EXISTING,
+            CreateFileW, ReadFile, WriteFile, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+            FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
         },
-        System::{
-            Pipes::PIPE_READMODE_BYTE,
-            IO::{ReadFile, WriteFile},
-        },
+        System::Pipes::PIPE_READMODE_BYTE,
     };
 
     pub struct NamedPipeClient {
@@ -40,11 +39,11 @@ mod windows_impl {
         writer: PipeWriter,
     }
 
-    struct PipeReader {
+    pub struct PipeReader {
         handle: OwnedHandle,
     }
 
-    struct PipeWriter {
+    pub struct PipeWriter {
         handle: OwnedHandle,
     }
 
@@ -93,7 +92,7 @@ mod windows_impl {
     }
 
     impl NamedPipeClient {
-        pub fn connect(pipe_name: &str, timeout: Duration) -> io::Result<Self> {
+        pub fn connect(pipe_name: &str, _timeout: Duration) -> io::Result<Self> {
             let wide_name: Vec<u16> = OsStr::new(pipe_name)
                 .encode_wide()
                 .chain(std::iter::once(0))
