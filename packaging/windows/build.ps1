@@ -50,14 +50,13 @@ function Build-Daemon {
 # ── Build shell extension ────────────────────────────────────────────────
 function Build-ShellExtension {
     Write-Step "Building Windows Shell Extension DLL (release)..."
-    Push-Location $ShellCrate
-    cargo build --release
-    Pop-Location
+    cargo build -p gdriver-shell-extension --release
 
-    if (-not (Test-Path "$ShellTarget\gdriver_shell.dll")) {
-        throw "Shell extension DLL not found: $ShellTarget\gdriver_shell.dll"
+    # Cargo workspace puts output in workspace root target dir
+    if (-not (Test-Path "$TargetDir\gdriver_shell.dll")) {
+        throw "Shell extension DLL not found: $TargetDir\gdriver_shell.dll"
     }
-    Write-Step "  -> $ShellTarget\gdriver_shell.dll"
+    Write-Step "  -> $TargetDir\gdriver_shell.dll"
 }
 
 # ── Preprocess NSIS template ─────────────────────────────────────────────
@@ -67,7 +66,7 @@ function Preprocess-NsisTemplate {
     $templateContent = Get-Content $NsisTemplate -Raw
 
     $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\'
-    $shellAbsPath  = (Resolve-Path "$ShellTarget\gdriver_shell.dll").Path -replace '\\', '\\'
+    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '\\'
 
     $templateContent = $templateContent -replace '__DAEMON_BINARY__', $daemonAbsPath
     $templateContent = $templateContent -replace '__SHELL_DLL__', $shellAbsPath
