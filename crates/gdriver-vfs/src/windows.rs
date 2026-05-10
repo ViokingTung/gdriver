@@ -531,6 +531,7 @@ impl FileSystemContext for WinFspVfs {
         let mut file = match fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&file_context.local_path)
         {
             Ok(f) => f,
@@ -548,7 +549,7 @@ impl FileSystemContext for WinFspVfs {
         match std::io::Write::write(&mut file, buffer) {
             Ok(n) => {
                 // Update the cached size and mtime in the DB.
-                let new_end = offset as i64 + n as i64;
+                let new_end = offset + n as i64;
                 let now_ms = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
