@@ -14,7 +14,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   APP_NAME: gDriver
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════
@@ -27,7 +26,7 @@ jobs:
       matrix:
         target: [deb, rpm, appimage]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -42,12 +41,12 @@ jobs:
             libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -56,7 +55,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -98,7 +97,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: linux-packages-${{ matrix.target }}
           path: dist/linux/
@@ -111,18 +110,18 @@ jobs:
     name: Build Windows Installer
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -131,7 +130,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -188,7 +187,7 @@ jobs:
           Get-Content SHA256SUMS.txt
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-packages
           path: dist/windows/
@@ -201,7 +200,7 @@ jobs:
     name: Build macOS DMG
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -209,12 +208,12 @@ jobs:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -223,7 +222,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -278,7 +277,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-packages
           path: dist/macos/
@@ -295,7 +294,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           path: artifacts
 
