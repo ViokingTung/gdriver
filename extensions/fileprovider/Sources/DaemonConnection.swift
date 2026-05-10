@@ -192,7 +192,7 @@ actor DaemonConnection {
             "parent": identifierToPath(template.parentItemIdentifier),
         ]
 
-        if template.contentType.conforms(to: .directory) {
+        if template.contentType?.conforms(to: .directory) == true {
             params["is_folder"] = true
         }
 
@@ -294,9 +294,9 @@ actor DaemonConnection {
 
         return FileProviderItem(
             itemIdentifier: identifier,
+            parentItemIdentifier: parentId,
             filename: name,
             contentType: contentType,
-            parentItemIdentifier: parentId,
             documentSize: NSNumber(value: size),
             creationDate: mtime,
             contentModificationDate: mtime,

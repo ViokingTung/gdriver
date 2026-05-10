@@ -73,10 +73,6 @@ class FileProviderItem: NSObject, NSFileProviderItem {
         contentType.conforms(to: .directory)
     }
 
-    var typeIdentifier: String {
-        contentType.identifier
-    }
-
     // MARK: - Version
 
     var itemVersion: NSFileProviderItemVersion {
