@@ -12,10 +12,13 @@ mod context_menu;
 mod ipc;
 mod overlay;
 
-use windows::core::*;
-use windows::Win32::Foundation::*;
-use windows::Win32::System::Com::*;
-use windows::Win32::System::LibraryLoader::*;
+use windows::{
+    core::*,
+    Win32::{
+        Foundation::*,
+        System::{Com::*, LibraryLoader::*},
+    },
+};
 
 // ─── DLL Exports ────────────────────────────────────────────────────────────
 //
@@ -23,11 +26,7 @@ use windows::Win32::System::LibraryLoader::*;
 // when loading the shell extension.
 
 #[no_mangle]
-pub extern "system" fn DllMain(
-    _hinst: HINSTANCE,
-    reason: u32,
-    _reserved: *const c_void,
-) -> i32 {
+pub extern "system" fn DllMain(_hinst: HINSTANCE, reason: u32, _reserved: *const c_void) -> i32 {
     const DLL_PROCESS_ATTACH: u32 = 1;
     const DLL_PROCESS_DETACH: u32 = 0;
 
@@ -114,7 +113,7 @@ const CLSID_CONTEXT_MENU: GUID = GUID::from_u128(0xA1B2C3D4_1111_2222_3333_44445
 // ─── Class Factory ──────────────────────────────────────────────────────────
 
 struct ClassFactory {
-    create_fn: fn() -> IUnknown,
+    create_fn: Box<dyn Fn() -> IUnknown>,
     ref_count: u32,
 }
 
@@ -125,10 +124,10 @@ impl ClassFactory {
         IClassFactory: From<T>,
     {
         let factory = Box::new(Self {
-            create_fn || {
+            create_fn: Box::new(|| {
                 let obj = T::default();
                 IClassFactory::from(obj)
-            },
+            }),
             ref_count: 1,
         });
         IClassFactory::from(Box::into_raw(factory))
@@ -143,9 +142,7 @@ mod open {
     pub fn that(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "windows")]
         {
-            Command::new("cmd")
-                .args(["/c", "start", "", url])
-                .spawn()?;
+            Command::new("cmd").args(["/c", "start", "", url]).spawn()?;
         }
 
         #[cfg(not(target_os = "windows"))]

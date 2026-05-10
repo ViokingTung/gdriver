@@ -4,11 +4,13 @@
 // the Rust `gdriver-ipc` crate and the Python IPC clients for Linux
 // extensions.
 
+use std::{
+    io::{Read, Write},
+    time::Duration,
+};
+
 use serde_json::Value;
-use std::io::{Read, Write};
-use std::time::Duration;
-use windows::Win32::Storage::FileSystem::*;
-use windows::Win32::Foundation::*;
+use windows::Win32::{Foundation::*, Storage::FileSystem::*};
 
 /// Named Pipe path for the gdriver daemon on Windows.
 const PIPE_PATH: &str = r"\\.\pipe\gdriver";
@@ -78,12 +80,7 @@ impl IpcClient {
         // Set pipe timeout
         let timeout_ms = timeout.as_millis() as u32;
         unsafe {
-            let _ = SetNamedPipeHandleState(
-                pipe,
-                Some(&timeout_ms),
-                None,
-                None,
-            );
+            let _ = SetNamedPipeHandleState(pipe, Some(&timeout_ms), None, None);
         }
 
         Ok(Self {
@@ -108,11 +105,10 @@ impl IpcClient {
             request["params"] = p;
         }
 
-        let data = serde_json::to_string(&request)
-            .map_err(|e| JsonRpcError {
-                code: -1,
-                message: format!("failed to serialize request: {}", e),
-            })?;
+        let data = serde_json::to_string(&request).map_err(|e| JsonRpcError {
+            code: -1,
+            message: format!("failed to serialize request: {}", e),
+        })?;
 
         // Send the request
         let mut bytes_written = 0u32;
@@ -147,10 +143,7 @@ impl IpcClient {
 
             if let Some(error) = resp.get("error") {
                 return Err(JsonRpcError {
-                    code: error
-                        .get("code")
-                        .and_then(|c| c.as_i64())
-                        .unwrap_or(-1) as i32,
+                    code: error.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32,
                     message: error
                         .get("message")
                         .and_then(|m| m.as_str())
@@ -177,16 +170,12 @@ impl IpcClient {
             let mut chunk = [0u8; 4096];
             let mut bytes_read = 0u32;
             unsafe {
-                ReadFile(
-                    self.pipe,
-                    Some(&mut chunk),
-                    Some(&mut bytes_read),
-                    None,
-                )
-                .map_err(|e| JsonRpcError {
-                    code: -1,
-                    message: format!("failed to read from pipe: {}", e),
-                })?;
+                ReadFile(self.pipe, Some(&mut chunk), Some(&mut bytes_read), None).map_err(
+                    |e| JsonRpcError {
+                        code: -1,
+                        message: format!("failed to read from pipe: {}", e),
+                    },
+                )?;
             }
 
             if bytes_read == 0 {

@@ -10,9 +10,11 @@
 //   - error: Red X (sync error)
 //   - uploading: Blue up arrow (file is being uploaded)
 
-use windows::core::*;
-use windows::Win32::Foundation::*;
-use windows::Win32::UI::Shell::*;
+use windows::{
+    core::*,
+    Win32::{Foundation::*, UI::Shell::*},
+};
+
 use crate::ipc;
 
 // ─── Overlay CLSIDs ────────────────────────────────────────────────────────

@@ -11,12 +11,17 @@
 //   - Share: Open sharing dialog in browser
 
 use std::ffi::c_void;
-use windows::core::*;
-use windows::Win32::Foundation::*;
-use windows::Win32::Graphics::Gdi::*;
-use windows::Win32::System::Com::*;
-use windows::Win32::UI::Shell::*;
-use windows::Win32::UI::WindowsAndMessaging::*;
+
+use windows::{
+    core::*,
+    Win32::{
+        Foundation::*,
+        Graphics::Gdi::*,
+        System::Com::*,
+        UI::{Shell::*, WindowsAndMessaging::*},
+    },
+};
+
 use crate::ipc;
 
 // ─── Menu item IDs ─────────────────────────────────────────────────────────
@@ -48,11 +53,7 @@ impl GDriverContextMenu {
     /// Check if a path is inside the gDriver mount directory.
     fn is_gdriver_path(path: &str) -> bool {
         // Check common mount points
-        let gdriver_paths = [
-            r"G:\",
-            r"Google Drive\",
-            "GoogleDrive",
-        ];
+        let gdriver_paths = [r"G:\", r"Google Drive\", "GoogleDrive"];
 
         let path_lower = path.to_lowercase();
         gdriver_paths
@@ -65,7 +66,11 @@ impl GDriverContextMenu {
         // Strip the mount point prefix to get the Drive-relative path
         let mount_points = [r"G:\", "Google Drive\\"];
         for prefix in &mount_points {
-            if self.file_path.to_lowercase().starts_with(&prefix.to_lowercase()) {
+            if self
+                .file_path
+                .to_lowercase()
+                .starts_with(&prefix.to_lowercase())
+            {
                 return self.file_path[prefix.len()..].to_string();
             }
         }
@@ -135,13 +140,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
 
         unsafe {
             // Add a separator
-            InsertMenuW(
-                menu,
-                index,
-                MF_BYPOSITION | MF_SEPARATOR,
-                0,
-                None,
-            );
+            InsertMenuW(menu, index, MF_BYPOSITION | MF_SEPARATOR, 0, None);
 
             // Available offline
             InsertMenuW(
@@ -162,13 +161,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             );
 
             // Separator
-            InsertMenuW(
-                menu,
-                index + 3,
-                MF_BYPOSITION | MF_SEPARATOR,
-                0,
-                None,
-            );
+            InsertMenuW(menu, index + 3, MF_BYPOSITION | MF_SEPARATOR, 0, None);
 
             // Copy Drive link
             InsertMenuW(
@@ -254,10 +247,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             }
             CMD_VIEW_IN_DRIVE => {
                 // Open in browser
-                let url = format!(
-                    "https://drive.google.com/file/d/{}",
-                    relative
-                );
+                let url = format!("https://drive.google.com/file/d/{}", relative);
                 let _ = open::that(&url);
             }
             CMD_SHARE => {
@@ -296,10 +286,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             // GCS_HELPTEXTW
             6 => {
                 let dst = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        name.as_mut_ptr() as *mut u16,
-                        name.len() / 2,
-                    )
+                    std::slice::from_raw_parts_mut(name.as_mut_ptr() as *mut u16, name.len() / 2)
                 };
                 let len = wide.len().min(dst.len() - 1);
                 dst[..len].copy_from_slice(&wide[..len]);
@@ -317,10 +304,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
                 };
                 let wide_verb: Vec<u16> = verb.encode_utf16().collect();
                 let dst = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        name.as_mut_ptr() as *mut u16,
-                        name.len() / 2,
-                    )
+                    std::slice::from_raw_parts_mut(name.as_mut_ptr() as *mut u16, name.len() / 2)
                 };
                 let len = wide_verb.len().min(dst.len() - 1);
                 dst[..len].copy_from_slice(&wide_verb[..len]);
