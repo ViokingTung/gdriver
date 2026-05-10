@@ -1,22 +1,158 @@
-use std::cell::RefCell;
-use std::io::{BufRead, BufReader, Write};
+use std::{
+    cell::RefCell,
+    io::{BufRead, BufReader, Write},
+    path::PathBuf,
+    sync::atomic::{AtomicI64, Ordering},
+    time::Duration,
+};
+
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::Duration;
+
+#[cfg(windows)]
+mod windows_impl {
+    use std::ffi::OsStr;
+    use std::io::{self, BufRead, BufReader, Read, Write};
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::time::Duration;
+
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Pipes::PIPE_READMODE_BYTE;
+
+    pub struct NamedPipeClient {
+        reader: BufReader<PipeReader>,
+        writer: PipeWriter,
+    }
+
+    struct PipeReader {
+        handle: OwnedHandle,
+    }
+
+    struct PipeWriter {
+        handle: OwnedHandle,
+    }
+
+    impl Read for PipeReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let mut bytes_read = 0;
+            let result = unsafe {
+                windows_sys::Win32::Storage::FileSystem::ReadFile(
+                    self.handle.as_raw_handle() as _,
+                    buf.as_mut_ptr(),
+                    buf.len() as u32,
+                    &mut bytes_read,
+                    std::ptr::null_mut(),
+                )
+            };
+            if result == 0 {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(bytes_read as usize)
+            }
+        }
+    }
+
+    impl Write for PipeWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let mut bytes_written = 0;
+            let result = unsafe {
+                windows_sys::Win32::Storage::FileSystem::WriteFile(
+                    self.handle.as_raw_handle() as _,
+                    buf.as_ptr(),
+                    buf.len() as u32,
+                    &mut bytes_written,
+                    std::ptr::null_mut(),
+                )
+            };
+            if result == 0 {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(bytes_written as usize)
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl NamedPipeClient {
+        pub fn connect(pipe_name: &str, timeout: Duration) -> io::Result<Self> {
+            let wide_name: Vec<u16> = OsStr::new(pipe_name)
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+
+            // Try to open existing pipe first
+            let handle = unsafe {
+                CreateFileW(
+                    wide_name.as_ptr(),
+                    FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    std::ptr::null_mut(),
+                    OPEN_EXISTING,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            };
+
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+
+            let handle = unsafe { OwnedHandle::from_raw_handle(handle as _) };
+
+            // Set pipe to byte mode
+            unsafe {
+                windows_sys::Win32::System::Pipes::SetNamedPipeHandleState(
+                    handle.as_raw_handle() as _,
+                    &PIPE_READMODE_BYTE,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+            }
+
+            let reader_handle = handle.try_clone()?;
+            let writer_handle = handle;
+
+            Ok(Self {
+                reader: BufReader::new(PipeReader { handle: reader_handle }),
+                writer: PipeWriter { handle: writer_handle },
+            })
+        }
+
+        pub fn reader(&mut self) -> &mut BufReader<PipeReader> {
+            &mut self.reader
+        }
+
+        pub fn writer(&mut self) -> &mut PipeWriter {
+            &mut self.writer
+        }
+    }
+}
 
 use serde_json::Value;
 
-use crate::methods::*;
-use crate::types::*;
+use crate::{methods::*, types::*};
 
 /// Return the path to the daemon IPC socket.
 ///
 /// Mirrors the daemon's `socket_path()` logic.
+#[cfg(unix)]
 pub fn socket_path() -> PathBuf {
     dirs::runtime_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join("gdriver.sock")
+}
+
+/// Return the named pipe path for Windows.
+#[cfg(windows)]
+pub fn pipe_path() -> String {
+    r"\\.\pipe\gdriver".to_string()
 }
 
 /// Synchronous, blocking IPC client for communicating with `gdriver-daemon`.
@@ -24,13 +160,20 @@ pub fn socket_path() -> PathBuf {
 /// Designed for use by file manager extensions (Nautilus, Dolphin, etc.) which
 /// run inside the file manager's process and cannot use an async runtime.
 ///
-/// The client opens a Unix Domain Socket, sends newline-delimited JSON-RPC 2.0
-/// requests, and reads back the corresponding response.  Push notifications
-/// from the daemon are silently discarded (extensions are read-only and do not
-/// need real-time events).
+/// The client opens a Unix Domain Socket (Unix) or Named Pipe (Windows),
+/// sends newline-delimited JSON-RPC 2.0 requests, and reads back the
+/// corresponding response. Push notifications from the daemon are silently
+/// discarded (extensions are read-only and do not need real-time events).
+#[cfg(unix)]
 pub struct IpcClient {
     reader: RefCell<BufReader<UnixStream>>,
     writer: UnixStream,
+    next_id: AtomicI64,
+}
+
+#[cfg(windows)]
+pub struct IpcClient {
+    pipe: RefCell<windows_impl::NamedPipeClient>,
     next_id: AtomicI64,
 }
 
@@ -39,6 +182,7 @@ impl IpcClient {
     ///
     /// `timeout` controls how long each individual read/write may block before
     /// returning an error.
+    #[cfg(unix)]
     pub fn connect(timeout: Duration) -> Result<Self, std::io::Error> {
         let stream = UnixStream::connect(socket_path())?;
         stream.set_read_timeout(Some(timeout))?;
@@ -52,6 +196,16 @@ impl IpcClient {
         })
     }
 
+    /// Connect to the daemon named pipe (Windows).
+    #[cfg(windows)]
+    pub fn connect(timeout: Duration) -> Result<Self, std::io::Error> {
+        let pipe = windows_impl::NamedPipeClient::connect(&pipe_path(), timeout)?;
+        Ok(Self {
+            pipe: RefCell::new(pipe),
+            next_id: AtomicI64::new(1),
+        })
+    }
+
     /// Connect using the default 5-second timeout.
     pub fn connect_default() -> Result<Self, std::io::Error> {
         Self::connect(Duration::from_secs(5))
@@ -60,11 +214,8 @@ impl IpcClient {
     /// Send a JSON-RPC request and wait for the matching response.
     ///
     /// Push notifications received while waiting are silently skipped.
-    pub fn call(
-        &self,
-        method: &str,
-        params: Option<Value>,
-    ) -> Result<Value, JsonRpcError> {
+    #[cfg(unix)]
+    pub fn call(&self, method: &str, params: Option<Value>) -> Result<Value, JsonRpcError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let request = JsonRpcRequest::new(method, params, JsonRpcId::Num(id));
 
@@ -103,7 +254,55 @@ impl IpcClient {
             if resp.is_success() {
                 return Ok(resp.result.unwrap_or(Value::Null));
             } else {
-                return Err(resp.error.unwrap_or_else(|| JsonRpcError::internal_error("unknown error")));
+                return Err(resp
+                    .error
+                    .unwrap_or_else(|| JsonRpcError::internal_error("unknown error")));
+            }
+        }
+    }
+
+    /// Send a JSON-RPC request and wait for the matching response (Windows).
+    #[cfg(windows)]
+    pub fn call(&self, method: &str, params: Option<Value>) -> Result<Value, JsonRpcError> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let request = JsonRpcRequest::new(method, params, JsonRpcId::Num(id));
+
+        let mut json = serde_json::to_string(&request)
+            .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+        json.push('\n');
+
+        // Write the request.
+        {
+            let mut pipe = self.pipe.borrow_mut();
+            let writer = pipe.writer();
+            writer.write_all(json.as_bytes()).map_err(io_err)?;
+            writer.flush().map_err(io_err)?;
+        }
+
+        // Read responses until we get one with a matching id.
+        // Push notifications (no id) are silently discarded.
+        loop {
+            let mut line = String::new();
+            let mut pipe = self.pipe.borrow_mut();
+            let n = pipe.reader().read_line(&mut line).map_err(io_err)?;
+            if n == 0 {
+                return Err(JsonRpcError::internal_error("daemon disconnected"));
+            }
+
+            let resp: JsonRpcResponse = serde_json::from_str(line.trim())
+                .map_err(|e| JsonRpcError::internal_error(e.to_string()))?;
+
+            // Push notifications have no id — skip them.
+            if resp.id.is_none() {
+                continue;
+            }
+
+            if resp.is_success() {
+                return Ok(resp.result.unwrap_or(Value::Null));
+            } else {
+                return Err(resp
+                    .error
+                    .unwrap_or_else(|| JsonRpcError::internal_error("unknown error")));
             }
         }
     }
@@ -266,6 +465,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(unix)]
     fn socket_path_is_non_empty() {
         let path = socket_path();
         assert!(!path.as_os_str().is_empty());
@@ -273,9 +473,25 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
+    fn pipe_path_is_non_empty() {
+        let path = pipe_path();
+        assert!(!path.is_empty());
+        assert!(path.contains("gdriver"));
+    }
+
+    #[test]
     #[ignore] // Requires daemon to NOT be running — run with `cargo test -- --ignored`
     fn connect_fails_when_daemon_not_running() {
         // Daemon is not running in the test environment — connection should fail.
+        let result = IpcClient::connect(Duration::from_millis(100));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_connect_fails_when_daemon_not_running() {
+        // On Windows, connection should fail when daemon is not running.
         let result = IpcClient::connect(Duration::from_millis(100));
         assert!(result.is_err());
     }
