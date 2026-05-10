@@ -75,7 +75,7 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "languages": ["English", "SimpChinese"],
-        "template": "../../../packaging/windows/nsis/installer.nsi"
+        "template": "../../../../packaging/windows/nsis/installer.nsi"
       }
     },
     "macOS": {
