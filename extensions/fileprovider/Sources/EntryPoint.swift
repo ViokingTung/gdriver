@@ -13,11 +13,6 @@ struct GDriverFileProviderExtension {
             displayName: "Google Drive"
         )
 
-        let manager = NSFileProviderManager(for: domain)
-        guard let manager = manager else {
-            fatalError("FileProvider domain not found. Ensure the extension is registered.")
-        }
-
         // The actual extension instance is created by the FileProvider
         // framework when needed. This main entry point registers the
         // domain if it doesn't already exist.

@@ -6,9 +6,40 @@ import UniformTypeIdentifiers
 /// Conforms to `NSFileProviderItem` with the full set of properties
 /// that Finder uses to display the item (name, size, date, capabilities,
 /// sync status).
-struct FileProviderItem: NSFileProviderItem {
+class FileProviderItem: NSObject, NSFileProviderItem {
 
     // MARK: - Core identity
+
+    init(
+        itemIdentifier: NSFileProviderItemIdentifier,
+        parentItemIdentifier: NSFileProviderItemIdentifier,
+        filename: String,
+        contentType: UTType,
+        documentSize: NSNumber?,
+        creationDate: Date?,
+        contentModificationDate: Date?,
+        capabilities: NSFileProviderItemCapabilities,
+        isUploaded: Bool,
+        isDownloaded: Bool,
+        isMostRecentVersionDownloaded: Bool,
+        isUploading: Bool,
+        isShared: Bool
+    ) {
+        self.itemIdentifier = itemIdentifier
+        self.parentItemIdentifier = parentItemIdentifier
+        self.filename = filename
+        self.contentType = contentType
+        self.documentSize = documentSize
+        self.creationDate = creationDate
+        self.contentModificationDate = contentModificationDate
+        self.capabilities = capabilities
+        self.isUploaded = isUploaded
+        self.isDownloaded = isDownloaded
+        self.isMostRecentVersionDownloaded = isMostRecentVersionDownloaded
+        self.isUploading = isUploading
+        self.isShared = isShared
+        super.init()
+    }
 
     let itemIdentifier: NSFileProviderItemIdentifier
     let parentItemIdentifier: NSFileProviderItemIdentifier

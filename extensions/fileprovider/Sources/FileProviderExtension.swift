@@ -26,7 +26,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     // MARK: - NSFileProviderReplicatedExtension
 
     func invalidate() {
-        daemon.disconnect()
+        Task { await daemon.disconnect() }
         NSLog("gDriver: FileProvider extension invalidated")
     }
 
