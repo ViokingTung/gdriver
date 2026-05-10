@@ -10,12 +10,20 @@
 //   - View in Drive web: Open file in Google Drive web interface
 //   - Share: Open sharing dialog in browser
 
+use std::{
+    cell::{Cell, RefCell},
+    ffi::c_void,
+};
+
 use windows::{
     core::*,
     Win32::{
         Foundation::*,
-        System::{Com::*, DataExchange::*, Memory::*},
-        UI::{Shell::*, WindowsAndMessaging::*},
+        System::{Com::*, DataExchange::*, Memory::*, Ole::*, Registry::HKEY},
+        UI::{
+            Shell::{Common::ITEMIDLIST, *},
+            WindowsAndMessaging::*,
+        },
     },
 };
 
@@ -34,17 +42,23 @@ const CMD_SHARE: u32 = 4;
 #[implement(IContextMenu, IShellExtInit)]
 pub struct GDriverContextMenu {
     /// The path of the file/folder that was right-clicked.
-    file_path: String,
+    file_path: RefCell<String>,
     /// Whether the file is inside the gDriver mount directory.
-    is_gdriver_path: bool,
+    is_gdriver_path: Cell<bool>,
+}
+
+impl Default for GDriverContextMenu {
+    fn default() -> Self {
+        Self {
+            file_path: RefCell::new(String::new()),
+            is_gdriver_path: Cell::new(false),
+        }
+    }
 }
 
 impl GDriverContextMenu {
     pub fn new() -> Self {
-        Self {
-            file_path: String::new(),
-            is_gdriver_path: false,
-        }
+        Self::default()
     }
 
     /// Check if a path is inside the gDriver mount directory.
@@ -60,28 +74,26 @@ impl GDriverContextMenu {
 
     /// Get the relative path within the gDriver mount.
     fn relative_path(&self) -> String {
+        let file_path = self.file_path.borrow();
         // Strip the mount point prefix to get the Drive-relative path
         let mount_points = [r"G:\", "Google Drive\\"];
         for prefix in &mount_points {
-            if self
-                .file_path
-                .to_lowercase()
-                .starts_with(&prefix.to_lowercase())
-            {
-                return self.file_path[prefix.len()..].to_string();
+            if file_path.to_lowercase().starts_with(&prefix.to_lowercase()) {
+                return file_path[prefix.len()..].to_string();
             }
         }
-        self.file_path.clone()
+        file_path.clone()
     }
 }
 
-impl IShellExtInit_Impl for GDriverContextMenu {
+impl IShellExtInit_Impl for GDriverContextMenu_Impl {
     fn Initialize(
         &self,
-        _pidl_folder: Option<*const ITEMIDLIST>,
+        _pidl_folder: *const ITEMIDLIST,
         data_object: Option<&IDataObject>,
-        _hkey: *const HKEY__,
+        _hkey: HKEY,
     ) -> Result<()> {
+        let inner = self.get_impl();
         if let Some(data_obj) = data_object {
             // Get the file path from the data object
             let format_etc = FORMATETC {
@@ -92,14 +104,11 @@ impl IShellExtInit_Impl for GDriverContextMenu {
                 tymed: TYMED_HGLOBAL.0 as u32,
             };
 
-            let mut medium = STGMEDIUM::default();
-            unsafe {
-                data_obj.GetData(&format_etc, &mut medium)?;
-            }
+            let mut medium = unsafe { data_obj.GetData(&format_etc)? };
 
             if medium.tymed == TYMED_HGLOBAL.0 as u32 {
                 unsafe {
-                    let hdrop = HDROP(medium.hGlobal);
+                    let hdrop = HDROP(medium.u.hGlobal.0);
                     let file_count = DragQueryFileW(hdrop, 0xFFFFFFFF, None);
 
                     if file_count > 0 {
@@ -109,11 +118,12 @@ impl IShellExtInit_Impl for GDriverContextMenu {
                         DragQueryFileW(hdrop, 0, Some(&mut buffer));
                         let path = String::from_utf16_lossy(&buffer[..len]);
 
-                        self.file_path = path;
-                        self.is_gdriver_path = Self::is_gdriver_path(&self.file_path);
+                        let is_gdriver = GDriverContextMenu::is_gdriver_path(&path);
+                        inner.is_gdriver_path.set(is_gdriver);
+                        *inner.file_path.borrow_mut() = path;
                     }
 
-                    ReleaseStgMedium(&raw const medium);
+                    ReleaseStgMedium(&mut medium);
                 }
             }
         }
@@ -122,7 +132,7 @@ impl IShellExtInit_Impl for GDriverContextMenu {
     }
 }
 
-impl IContextMenu_Impl for GDriverContextMenu {
+impl IContextMenu_Impl for GDriverContextMenu_Impl {
     fn QueryContextMenu(
         &self,
         menu: HMENU,
@@ -131,16 +141,17 @@ impl IContextMenu_Impl for GDriverContextMenu {
         _cmd_last: u32,
         _flags: u32,
     ) -> Result<()> {
-        if !self.is_gdriver_path {
+        let inner = self.get_impl();
+        if !inner.is_gdriver_path.get() {
             return Ok(());
         }
 
         unsafe {
             // Add a separator
-            InsertMenuW(menu, index, MF_BYPOSITION | MF_SEPARATOR, 0, None);
+            let _ = InsertMenuW(menu, index, MF_BYPOSITION | MF_SEPARATOR, 0, None);
 
             // Available offline
-            InsertMenuW(
+            let _ = InsertMenuW(
                 menu,
                 index + 1,
                 MF_BYPOSITION | MF_STRING,
@@ -149,7 +160,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             );
 
             // Online only
-            InsertMenuW(
+            let _ = InsertMenuW(
                 menu,
                 index + 2,
                 MF_BYPOSITION | MF_STRING,
@@ -158,10 +169,10 @@ impl IContextMenu_Impl for GDriverContextMenu {
             );
 
             // Separator
-            InsertMenuW(menu, index + 3, MF_BYPOSITION | MF_SEPARATOR, 0, None);
+            let _ = InsertMenuW(menu, index + 3, MF_BYPOSITION | MF_SEPARATOR, 0, None);
 
             // Copy Drive link
-            InsertMenuW(
+            let _ = InsertMenuW(
                 menu,
                 index + 4,
                 MF_BYPOSITION | MF_STRING,
@@ -170,7 +181,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             );
 
             // View in Drive web
-            InsertMenuW(
+            let _ = InsertMenuW(
                 menu,
                 index + 5,
                 MF_BYPOSITION | MF_STRING,
@@ -179,7 +190,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             );
 
             // Share
-            InsertMenuW(
+            let _ = InsertMenuW(
                 menu,
                 index + 6,
                 MF_BYPOSITION | MF_STRING,
@@ -192,6 +203,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
     }
 
     fn InvokeCommand(&self, command: *const CMINVOKECOMMANDINFO) -> Result<()> {
+        let inner = self.get_impl();
         // Check if the command is a verb string or a command offset
         let cmd = unsafe {
             if (*command).lpVerb.0 as u32 <= CMD_SHARE {
@@ -210,7 +222,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
             }
         };
 
-        let relative = self.relative_path();
+        let relative = inner.relative_path();
 
         match cmd {
             CMD_AVAILABLE_OFFLINE => {
@@ -224,7 +236,7 @@ impl IContextMenu_Impl for GDriverContextMenu {
                     // Copy to clipboard
                     unsafe {
                         if OpenClipboard(HWND::default()).is_ok() {
-                            EmptyClipboard();
+                            let _ = EmptyClipboard();
 
                             let wide: Vec<u16> =
                                 link.encode_utf16().chain(std::iter::once(0)).collect();
@@ -235,14 +247,14 @@ impl IContextMenu_Impl for GDriverContextMenu {
                                 let dst = GlobalLock(ptr) as *mut u16;
                                 if !dst.is_null() {
                                     std::ptr::copy_nonoverlapping(wide.as_ptr(), dst, wide.len());
-                                    GlobalUnlock(ptr);
-                                    SetClipboardData(
+                                    let _ = GlobalUnlock(ptr);
+                                    let _ = SetClipboardData(
                                         CF_UNICODETEXT.0 as u32,
-                                        Some(HANDLE(ptr as isize)),
+                                        HANDLE(ptr.0 as *mut c_void),
                                     );
                                 }
                             }
-                            CloseClipboard();
+                            let _ = CloseClipboard();
                         }
                     }
                 }

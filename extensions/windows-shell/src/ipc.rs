@@ -4,13 +4,16 @@
 // the Rust `gdriver-ipc` crate and the Python IPC clients for Linux
 // extensions.
 
-use std::{io::Write, time::Duration};
+use std::time::Duration;
 
 use serde_json::Value;
-use windows::Win32::{Foundation::*, Storage::FileSystem::*};
+use windows::{
+    core::PCSTR,
+    Win32::{Foundation::*, Storage::FileSystem::*, System::Pipes::*},
+};
 
 /// Named Pipe path for the gdriver daemon on Windows.
-const PIPE_PATH: &str = r"\\.\pipe\gdriver";
+const PIPE_PATH: &[u8] = b"\\\\.\\pipe\\gdriver\0";
 
 /// Default timeout for IPC calls.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -54,8 +57,8 @@ impl IpcClient {
     pub fn with_timeout(timeout: Duration) -> Result<Self, JsonRpcError> {
         let pipe = unsafe {
             CreateFileA(
-                PIPE_PATH,
-                GENERIC_READ | GENERIC_WRITE,
+                PCSTR(PIPE_PATH.as_ptr()),
+                (GENERIC_READ | GENERIC_WRITE).0,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 None,
                 OPEN_EXISTING,
@@ -77,7 +80,7 @@ impl IpcClient {
         // Set pipe timeout
         let timeout_ms = timeout.as_millis() as u32;
         unsafe {
-            let _ = SetNamedPipeHandleState(pipe, Some(&timeout_ms), None, None);
+            let _ = SetNamedPipeHandleState(pipe, None, None, Some(&timeout_ms));
         }
 
         Ok(Self {
