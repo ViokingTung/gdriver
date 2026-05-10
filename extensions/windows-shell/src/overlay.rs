@@ -12,7 +12,7 @@
 
 use windows::{
     core::*,
-    Win32::{Foundation::*, UI::Shell::*},
+    Win32::UI::Shell::*,
 };
 
 use crate::ipc;
@@ -92,10 +92,16 @@ macro_rules! impl_overlay {
                 }
 
                 // Return error to indicate this overlay doesn't apply
-                Err(Error::from_hresult(HRESULT::from_win32(1))) // S_FALSE
+                Err(Error::from_hresult(HRESULT(1))) // S_FALSE
             }
 
-            fn GetOverlayInfo(&self, icon_file_buffer: &mut [u16]) -> Result<i32> {
+            fn GetOverlayInfo(
+                &self,
+                pwszIconFile: PWSTR,
+                cchMax: i32,
+                pIndex: *mut i32,
+                pdwFlags: *mut u32,
+            ) -> Result<()> {
                 // Return the path to the overlay icon file.
                 // In production, these would be embedded resources or
                 // installed alongside the DLL.
@@ -110,10 +116,14 @@ macro_rules! impl_overlay {
 
                 // Copy the icon path to the buffer
                 let wide: Vec<u16> = icon_path.encode_utf16().chain(std::iter::once(0)).collect();
-                let len = wide.len().min(icon_file_buffer.len());
-                icon_file_buffer[..len].copy_from_slice(&wide[..len]);
+                let len = (wide.len()).min(cchMax as usize);
+                unsafe {
+                    std::ptr::copy_nonoverlapping(wide.as_ptr(), pwszIconFile.0 as *mut u16, len);
+                    *pIndex = 0;
+                    *pdwFlags = 0; // ISIOI_ICONFILE
+                }
 
-                Ok($priority)
+                Ok(())
             }
 
             fn GetPriority(&self) -> Result<i32> {

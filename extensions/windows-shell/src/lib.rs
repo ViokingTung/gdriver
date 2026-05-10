@@ -12,6 +12,8 @@ mod context_menu;
 mod ipc;
 mod overlay;
 
+use std::ffi::c_void;
+
 use windows::{
     core::*,
     Win32::{

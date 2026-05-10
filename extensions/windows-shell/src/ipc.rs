@@ -5,7 +5,7 @@
 // extensions.
 
 use std::{
-    io::{Read, Write},
+    io::Write,
     time::Duration,
 };
 
