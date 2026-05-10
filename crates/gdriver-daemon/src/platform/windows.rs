@@ -6,6 +6,7 @@ use tracing::{info, warn};
 // ─── Auto-start via Registry ────────────────────────────────────────────────
 
 const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+#[allow(dead_code)]
 const APP_NAME: &str = "gDriver";
 const DAEMON_NAME: &str = "gDriverDaemon";
 
