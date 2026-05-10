@@ -67,7 +67,7 @@ impl GDriverFS {
         tokio::runtime::Handle::current().block_on(f)
     }
 
-    /// Build `FileAttr` for the synthetic root directory (inode 1).
+    /// Build `FileAttr` for the synthetic root directory (inode 0).
     fn root_attr() -> fuser::FileAttr {
         let now = SystemTime::now();
         fuser::FileAttr {
