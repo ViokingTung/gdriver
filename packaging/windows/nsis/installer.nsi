@@ -30,12 +30,6 @@
 !define DAEMON_BINARY  "__DAEMON_BINARY__"
 !define SHELL_DLL      "__SHELL_DLL__"
 
-; ── Includes ─────────────────────────────────────────────────────────────
-!include "MUI2.nsh"
-!include "FileFunc.nsh"
-!include "LogicLib.nsh"
-!include "x64.nsh"
-
 ; ── General ──────────────────────────────────────────────────────────────
 Name "{{product_name}}"
 OutFile "{{product_name}}_{{version}}_x64-setup.exe"
@@ -76,10 +70,14 @@ Section "{{product_name}}" SecMain
     SetOutPath "$INSTDIR"
 
     ; --- Main application (Tauri-generated) ---
-    {{binaries}}
+    {{#each binaries}}
+    File /a "/oname={{this}}" "{{no-escape @key}}"
+    {{/each}}
 
     ; --- Resources (icons, locales, WebView2) ---
-    {{resources}}
+    {{#each resources}}
+    File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
+    {{/each}}
 
     ; --- gdriver-daemon (sync engine) ---
     File "/oname=$INSTDIR\gdriver-daemon.exe" "${DAEMON_BINARY}"
@@ -154,7 +152,9 @@ Section "Uninstall"
     Delete "$INSTDIR\gdriver_shell.dll"
     Delete "$INSTDIR\uninstall.exe"
 
-    {{binaries}}
+    {{#each binaries}}
+    Delete "$INSTDIR\\{{this}}"
+    {{/each}}
     RMDir /r "$INSTDIR"
 
     ; --- Remove autostart ---
