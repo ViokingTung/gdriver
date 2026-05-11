@@ -297,8 +297,13 @@ embed_components() {
     fi
 
     if [ -z "${app_path}" ]; then
-        # Check broader search
-        app_path=$(find "${PROJECT_ROOT}/target" -name "gDriver.app" -maxdepth 5 -type d 2>/dev/null | head -1)
+        # Check broader search (workspace target directory)
+        app_path=$(find "${PROJECT_ROOT}/target" -name "gDriver.app" -maxdepth 8 -type d 2>/dev/null | head -1)
+    fi
+
+    if [ -z "${app_path}" ]; then
+        # Last resort: search entire project
+        app_path=$(find "${PROJECT_ROOT}" -name "gDriver.app" -maxdepth 10 -type d 2>/dev/null | head -1)
     fi
 
     if [ -z "${app_path}" ]; then
@@ -409,10 +414,26 @@ main() {
     local app_path
     app_path=$(embed_components)
 
+    if [ -z "${app_path}" ]; then
+        err "embed_components returned empty path"
+        exit 1
+    fi
+
+    if [ ! -d "${app_path}" ]; then
+        err "App bundle directory does not exist: ${app_path}"
+        exit 1
+    fi
+
+    log "App bundle verified: ${app_path}"
+    log "App bundle size: $(du -sh "${app_path}" | cut -f1)"
+
     # 5. Re-create .dmg with the updated .app
     step "Re-creating DMG with embedded components"
     local dmg_output="${PROJECT_ROOT}/target/release/bundle/macos/${APP_NAME}_${VERSION}_${ARCH}.dmg"
     mkdir -p "$(dirname "${dmg_output}")"
+
+    log "DMG output path: ${dmg_output}"
+    log "DMG output dir exists: $([ -d "$(dirname "${dmg_output}")" ] && echo 'yes' || echo 'no')"
 
     # Remove old DMG if exists
     rm -f "${dmg_output}"
@@ -421,7 +442,13 @@ main() {
     hdiutil create -volname "${APP_NAME}" \
         -srcfolder "${app_path}" \
         -ov -format UDBZ \
-        "${dmg_output}"
+        "${dmg_output}" 2>&1 || {
+        err "hdiutil create failed (exit code: $?)"
+        err "Source folder: ${app_path}"
+        err "Source folder exists: $([ -d "${app_path}" ] && echo 'yes' || echo 'no')"
+        err "Destination: ${dmg_output}"
+        exit 1
+    }
 
     log "DMG created: ${dmg_output}"
 
