@@ -143,15 +143,20 @@ jobs:
         run: cargo install tauri-cli --version "^2"
 
       - name: Install NSIS
+        shell: pwsh
         run: |
           choco install nsis -y
           & "C:\Program Files (x86)\NSIS\makensis.exe" /VERSION
+          # Pre-populate Tauri's NSIS cache directory
+          $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+          New-Item -ItemType Directory -Force -Path $tauriNsisCache
+          Copy-Item -Path "C:\Program Files (x86)\NSIS\*" -Destination $tauriNsisCache -Recurse -Force
+          Write-Host "Tauri NSIS cache populated at: $tauriNsisCache"
+          Get-ChildItem $tauriNsisCache | Select-Object Name
 
       - name: Build and package (NSIS)
         shell: pwsh
         run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
-        env:
-          NSIS_DIR: "C:\\Program Files (x86)\\NSIS"
 
       - name: Collect artifacts
         shell: pwsh
