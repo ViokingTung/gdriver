@@ -39,6 +39,10 @@ function Build-Daemon {
     Write-Step "Building gdriver-daemon (release)..."
     Push-Location $ProjectRoot
     cargo build -p gdriver-daemon --release
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        throw "Daemon build failed with exit code $LASTEXITCODE"
+    }
     Pop-Location
 
     if (-not (Test-Path "$TargetDir\gdriver-daemon.exe")) {
@@ -51,6 +55,9 @@ function Build-Daemon {
 function Build-ShellExtension {
     Write-Step "Building Windows Shell Extension DLL (release)..."
     cargo build -p gdriver-shell-extension --release
+    if ($LASTEXITCODE -ne 0) {
+        throw "Shell extension build failed with exit code $LASTEXITCODE"
+    }
 
     # Cargo workspace puts output in workspace root target dir
     if (-not (Test-Path "$TargetDir\gdriver_shell.dll")) {
@@ -103,13 +110,19 @@ function Invoke-TauriBuild {
     # Ensure frontend deps
     if (-not (Test-Path "node_modules")) {
         pnpm install
+        if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with exit code $LASTEXITCODE" }
     }
 
     # Build frontend
     pnpm build
+    if ($LASTEXITCODE -ne 0) { throw "pnpm build failed with exit code $LASTEXITCODE" }
 
     # Tauri build (generates NSIS installer)
     cargo tauri build --bundles $BuildMode
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        throw "Tauri build failed with exit code $LASTEXITCODE"
+    }
 
     Pop-Location
 
