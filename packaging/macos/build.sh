@@ -297,8 +297,13 @@ embed_components() {
     fi
 
     if [ -z "${app_path}" ]; then
-        # Check broader search
-        app_path=$(find "${PROJECT_ROOT}/target" -name "gDriver.app" -maxdepth 5 -type d 2>/dev/null | head -1)
+        # Check broader search (workspace target directory)
+        app_path=$(find "${PROJECT_ROOT}/target" -name "gDriver.app" -maxdepth 8 -type d 2>/dev/null | head -1)
+    fi
+
+    if [ -z "${app_path}" ]; then
+        # Last resort: search entire project
+        app_path=$(find "${PROJECT_ROOT}" -name "gDriver.app" -maxdepth 10 -type d 2>/dev/null | head -1)
     fi
 
     if [ -z "${app_path}" ]; then
