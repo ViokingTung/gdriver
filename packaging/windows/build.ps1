@@ -39,6 +39,10 @@ function Build-Daemon {
     Write-Step "Building gdriver-daemon (release)..."
     Push-Location $ProjectRoot
     cargo build -p gdriver-daemon --release
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        throw "Daemon build failed with exit code $LASTEXITCODE"
+    }
     Pop-Location
 
     if (-not (Test-Path "$TargetDir\gdriver-daemon.exe")) {
@@ -51,6 +55,9 @@ function Build-Daemon {
 function Build-ShellExtension {
     Write-Step "Building Windows Shell Extension DLL (release)..."
     cargo build -p gdriver-shell-extension --release
+    if ($LASTEXITCODE -ne 0) {
+        throw "Shell extension build failed with exit code $LASTEXITCODE"
+    }
 
     # Cargo workspace puts output in workspace root target dir
     if (-not (Test-Path "$TargetDir\gdriver_shell.dll")) {
@@ -86,12 +93,13 @@ function Set-TauriTemplate {
     $tauriConfPath = "$TauriDir\tauri.conf.json"
     $text = Get-Content $tauriConfPath -Raw
 
-    # Replace the template path using string substitution to avoid
-    # ConvertTo-Json mangling the JSON structure
-    $text = $text -replace '"template"\s*:\s*"[^"]*"', '"template": "../../../packaging/windows/nsis/installer.processed.nsi"'
+    # Use absolute path — Tauri resolves relative paths from cwd, not from tauri.conf.json
+    $absTemplatePath = (Resolve-Path $TemplatePath).Path -replace '\\', '/'
+
+    $text = $text -replace '"template"\s*:\s*"[^"]*"', "`"template`": `"$absTemplatePath`""
 
     Set-Content $tauriConfPath $text -NoNewline
-    Write-Step "  Updated tauri.conf.json to use processed template"
+    Write-Step "  Updated tauri.conf.json to use template: $absTemplatePath"
 }
 
 # ── Build Tauri app ──────────────────────────────────────────────────────
@@ -102,13 +110,19 @@ function Invoke-TauriBuild {
     # Ensure frontend deps
     if (-not (Test-Path "node_modules")) {
         pnpm install
+        if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with exit code $LASTEXITCODE" }
     }
 
     # Build frontend
     pnpm build
+    if ($LASTEXITCODE -ne 0) { throw "pnpm build failed with exit code $LASTEXITCODE" }
 
     # Tauri build (generates NSIS installer)
     cargo tauri build --bundles $BuildMode
+    if ($LASTEXITCODE -ne 0) {
+        Pop-Location
+        throw "Tauri build failed with exit code $LASTEXITCODE"
+    }
 
     Pop-Location
 
@@ -221,6 +235,22 @@ function Main {
     if ($BuildMode -ne "msi") {
         $processedTemplate = Preprocess-NsisTemplate
         Set-TauriTemplate -TemplatePath $processedTemplate
+
+        # Debug: verify template preprocessing
+        if (Test-Path $processedTemplate) {
+            Write-Step "  Processed template exists: $processedTemplate"
+            Write-Step "  Template size: $((Get-Item $processedTemplate).Length) bytes"
+        } else {
+            throw "Processed template not found: $processedTemplate"
+        }
+
+        # Debug: verify tauri.conf.json was updated
+        $tauriConf = Get-Content "$TauriDir\tauri.conf.json" -Raw
+        if ($tauriConf -match '"template"\s*:\s*"([^"]+)"') {
+            Write-Step "  tauri.conf.json template: $($Matches[1])"
+        } else {
+            Write-Warn "  Could not find template path in tauri.conf.json"
+        }
     }
 
     # 3. Build Tauri app + installer

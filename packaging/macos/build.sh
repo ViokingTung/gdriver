@@ -57,10 +57,10 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-log()  { echo -e "${GREEN}[gDriver]${NC} $*"; }
-warn() { echo -e "${YELLOW}[gDriver] WARN${NC} $*"; }
-err()  { echo -e "${RED}[gDriver] ERR${NC} $*"; }
-step() { echo -e "${CYAN}[gDriver]${NC} === $* ==="; }
+log()  { echo -e "${GREEN}[gDriver]${NC} $*" >&2; }
+warn() { echo -e "${YELLOW}[gDriver] WARN${NC} $*" >&2; }
+err()  { echo -e "${RED}[gDriver] ERR${NC} $*" >&2; }
+step() { echo -e "${CYAN}[gDriver]${NC} === $* ===" >&2; }
 
 # ── Build daemon (universal binary) ─────────────────────────────────────
 build_daemon() {
@@ -119,19 +119,50 @@ build_extensions() {
 }
 
 # ── Create extension .appex bundles ──────────────────────────────────────
+# Locate a Swift build artifact with fallback search
+find_swift_binary() {
+    local name="$1"
+    local ext_dir="$2"
+
+    # Primary: swift build -c release output
+    local primary="${ext_dir}/.build/release/${name}"
+    if [ -f "${primary}" ]; then
+        echo "${primary}"
+        return 0
+    fi
+
+    # Fallback: multi-arch build output (apple subdirectory)
+    local fallback
+    fallback=$(find "${ext_dir}/.build" -name "${name}" -type f 2>/dev/null | head -1)
+    if [ -n "${fallback}" ] && [ -f "${fallback}" ]; then
+        echo "${fallback}"
+        return 0
+    fi
+
+    return 1
+}
+
 create_appex_bundles() {
     local app_contents="$1"
+    mkdir -p "${app_contents}/PlugIns"
 
-    step "Creating Finder Sync .appex bundle"
+    # ── Finder Sync Extension ──
+    local finder_binary
+    finder_binary=$(find_swift_binary "GDriverFinderSync" "${EXTENSIONS_DIR}/findersync")
 
-    local finder_appex="${app_contents}/PlugIns/GDriverFinderSync.appex"
-    mkdir -p "${finder_appex}/Contents/MacOS"
+    if [ -z "${finder_binary}" ]; then
+        warn "GDriverFinderSync binary not found — skipping Finder Sync extension"
+    else
+        step "Creating Finder Sync .appex bundle"
+        log "  Source: ${finder_binary}"
 
-    cp "${EXTENSIONS_DIR}/findersync/.build/release/GDriverFinderSync" \
-       "${finder_appex}/Contents/MacOS/GDriverFinderSync"
+        local finder_appex="${app_contents}/PlugIns/GDriverFinderSync.appex"
+        mkdir -p "${finder_appex}/Contents/MacOS"
 
-    # Generate Finder Sync Info.plist
-    cat > "${finder_appex}/Contents/Info.plist" << PLIST
+        cp "${finder_binary}" \
+           "${finder_appex}/Contents/MacOS/GDriverFinderSync"
+
+        cat > "${finder_appex}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -167,18 +198,26 @@ create_appex_bundles() {
 </plist>
 PLIST
 
-    log "  -> ${finder_appex}"
+        log "  -> ${finder_appex}"
+    fi
 
-    step "Creating FileProvider .appex bundle"
+    # ── FileProvider Extension ──
+    local fp_binary
+    fp_binary=$(find_swift_binary "GDriverFileProvider" "${EXTENSIONS_DIR}/fileprovider")
 
-    local fp_appex="${app_contents}/PlugIns/GDriverFileProvider.appex"
-    mkdir -p "${fp_appex}/Contents/MacOS"
+    if [ -z "${fp_binary}" ]; then
+        warn "GDriverFileProvider binary not found — skipping FileProvider extension"
+    else
+        step "Creating FileProvider .appex bundle"
+        log "  Source: ${fp_binary}"
 
-    cp "${EXTENSIONS_DIR}/fileprovider/.build/release/GDriverFileProvider" \
-       "${fp_appex}/Contents/MacOS/GDriverFileProvider"
+        local fp_appex="${app_contents}/PlugIns/GDriverFileProvider.appex"
+        mkdir -p "${fp_appex}/Contents/MacOS"
 
-    # Generate FileProvider Info.plist
-    cat > "${fp_appex}/Contents/Info.plist" << PLIST
+        cp "${fp_binary}" \
+           "${fp_appex}/Contents/MacOS/GDriverFileProvider"
+
+        cat > "${fp_appex}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -216,7 +255,8 @@ PLIST
 </plist>
 PLIST
 
-    log "  -> ${fp_appex}"
+        log "  -> ${fp_appex}"
+    fi
 }
 
 # ── Build Tauri app ─────────────────────────────────────────────────────
