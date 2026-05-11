@@ -332,9 +332,12 @@ embed_components() {
         "${app_contents}/Info.plist" 2>/dev/null || true
 
     log "App bundle structure:"
-    find "${app_path}" -maxdepth 4 -type f -o -type d | sed "s|${app_path}|gDriver.app|" | sort
+    find "${app_path}" -maxdepth 4 \( -type f -o -type d \) | sed "s|${app_path}|gDriver.app|" | sort >&2
 
-    echo "${app_path}"
+    # Ensure we return an absolute path
+    local abs_app_path
+    abs_app_path="$(cd "${app_path}" && pwd)"
+    echo "${abs_app_path}"
 }
 
 # ── Code signing ────────────────────────────────────────────────────────
