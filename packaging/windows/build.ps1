@@ -86,12 +86,13 @@ function Set-TauriTemplate {
     $tauriConfPath = "$TauriDir\tauri.conf.json"
     $text = Get-Content $tauriConfPath -Raw
 
-    # Replace the template path using string substitution to avoid
-    # ConvertTo-Json mangling the JSON structure
-    $text = $text -replace '"template"\s*:\s*"[^"]*"', '"template": "../../../packaging/windows/nsis/installer.processed.nsi"'
+    # Use absolute path — Tauri resolves relative paths from cwd, not from tauri.conf.json
+    $absTemplatePath = (Resolve-Path $TemplatePath).Path -replace '\\', '/'
+
+    $text = $text -replace '"template"\s*:\s*"[^"]*"', "`"template`": `"$absTemplatePath`""
 
     Set-Content $tauriConfPath $text -NoNewline
-    Write-Step "  Updated tauri.conf.json to use processed template"
+    Write-Step "  Updated tauri.conf.json to use template: $absTemplatePath"
 }
 
 # ── Build Tauri app ──────────────────────────────────────────────────────
@@ -221,6 +222,22 @@ function Main {
     if ($BuildMode -ne "msi") {
         $processedTemplate = Preprocess-NsisTemplate
         Set-TauriTemplate -TemplatePath $processedTemplate
+
+        # Debug: verify template preprocessing
+        if (Test-Path $processedTemplate) {
+            Write-Step "  Processed template exists: $processedTemplate"
+            Write-Step "  Template size: $((Get-Item $processedTemplate).Length) bytes"
+        } else {
+            throw "Processed template not found: $processedTemplate"
+        }
+
+        # Debug: verify tauri.conf.json was updated
+        $tauriConf = Get-Content "$TauriDir\tauri.conf.json" -Raw
+        if ($tauriConf -match '"template"\s*:\s*"([^"]+)"') {
+            Write-Step "  tauri.conf.json template: $($Matches[1])"
+        } else {
+            Write-Warn "  Could not find template path in tauri.conf.json"
+        }
     }
 
     # 3. Build Tauri app + installer
