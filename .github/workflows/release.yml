@@ -142,9 +142,16 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /VERSION
+
       - name: Build and package (NSIS)
         shell: pwsh
         run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+        env:
+          NSIS_DIR: "C:\\Program Files (x86)\\NSIS"
 
       - name: Collect artifacts
         shell: pwsh

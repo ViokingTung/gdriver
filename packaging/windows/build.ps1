@@ -72,8 +72,12 @@ function Preprocess-NsisTemplate {
 
     $templateContent = Get-Content $NsisTemplate -Raw
 
-    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\'
-    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '\\'
+    # NSIS requires double-backslash in paths: D:\foo → D:\\foo
+    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\\\'
+    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '\\\\'
+
+    Write-Step "  Daemon path: $daemonAbsPath"
+    Write-Step "  Shell DLL path: $shellAbsPath"
 
     $templateContent = $templateContent -replace '__DAEMON_BINARY__', $daemonAbsPath
     $templateContent = $templateContent -replace '__SHELL_DLL__', $shellAbsPath
