@@ -145,25 +145,35 @@ jobs:
       - name: Install NSIS and prepare Tauri cache
         shell: pwsh
         run: |
-          # Tauri v2 downloads NSIS from SourceForge to $LOCALAPPDATA/tauri/NSIS.
-          # Both Chocolatey and Tauri's zip provide a stub makensis.exe (2.5KB).
-          # Download the official NSIS zip and find the real console compiler.
+          # Tauri v2 downloads NSIS to $LOCALAPPDATA/tauri/NSIS and uses
+          # its own stub makensis.exe. We pre-populate this cache with the
+          # full NSIS distribution from SourceForge.
           $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
           if (Test-Path $tauriNsisCache) {
             Remove-Item -Recurse -Force $tauriNsisCache
           }
 
-          # Download and extract official NSIS from SourceForge
+          # Download NSIS using curl (Invoke-WebRequest fails with SourceForge redirects)
           $nsisZip = "$env:TEMP\nsis-3.11.zip"
           $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download"
           Write-Host "Downloading NSIS from SourceForge..."
-          Invoke-WebRequest -Uri $nsisUrl -OutFile $nsisZip -MaximumRedirection 5
+          curl.exe -L -o $nsisZip $nsisUrl
+          if ($LASTEXITCODE -ne 0) { throw "NSIS download failed" }
+
+          # Verify it's a real zip (not an HTML error page)
+          $fileInfo = Get-Item $nsisZip
+          Write-Host "Downloaded file size: $($fileInfo.Length) bytes"
+          if ($fileInfo.Length -lt 100000) {
+            throw "Downloaded file is too small ($($fileInfo.Length) bytes) - likely not a valid zip"
+          }
+
+          # Extract NSIS
           Write-Host "Extracting NSIS..."
           Expand-Archive -Path $nsisZip -DestinationPath "$env:TEMP\nsis-extract" -Force
           $nsisSrc = "$env:TEMP\nsis-extract\nsis-3.11"
           if (-not (Test-Path $nsisSrc)) { $nsisSrc = "$env:TEMP\nsis-extract" }
 
-          # List all .exe files and their sizes to find the real compiler
+          # List all .exe files to understand the structure
           Write-Host "=== NSIS executables ==="
           Get-ChildItem $nsisSrc -Filter "*.exe" -Recurse |
             Select-Object FullName, Length |
