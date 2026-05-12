@@ -142,17 +142,65 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Install NSIS
+      - name: Install NSIS and prepare Tauri cache
         shell: pwsh
         run: |
           choco install nsis -y
-          & "C:\Program Files (x86)\NSIS\makensis.exe" /VERSION
-          # Pre-populate Tauri's NSIS cache directory
+          $nsisChoco = "C:\Program Files (x86)\NSIS"
+          & "$nsisChoco\makensis.exe" /VERSION
+
+          # Tauri v2 expects NSIS at $LOCALAPPDATA/tauri/NSIS with specific structure
+          # including "Bin/makensis.exe" which Chocolatey doesn't provide.
+          # Copy Chocolatey NSIS to Tauri cache and add missing paths.
           $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-          New-Item -ItemType Directory -Force -Path $tauriNsisCache
-          Copy-Item -Path "C:\Program Files (x86)\NSIS\*" -Destination $tauriNsisCache -Recurse -Force
-          Write-Host "Tauri NSIS cache populated at: $tauriNsisCache"
-          Get-ChildItem $tauriNsisCache | Select-Object Name
+          if (Test-Path $tauriNsisCache) {
+            Remove-Item -Recurse -Force $tauriNsisCache
+          }
+          New-Item -ItemType Directory -Force -Path $tauriNsisCache | Out-Null
+          Copy-Item -Path "$nsisChoco\*" -Destination $tauriNsisCache -Recurse -Force
+
+          # Create Bin/ directory with makensis.exe copy (required by Tauri)
+          New-Item -ItemType Directory -Force -Path "$tauriNsisCache\Bin" | Out-Null
+          Copy-Item "$tauriNsisCache\makensis.exe" "$tauriNsisCache\Bin\makensis.exe"
+
+          # Download nsis_tauri_utils plugin
+          $pluginDir = "$tauriNsisCache\Plugins\x86-unicode\additional"
+          New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+          $dllUrl = "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
+          Invoke-WebRequest -Uri $dllUrl -OutFile "$pluginDir\nsis_tauri_utils.dll"
+
+          # Verify ALL required files that Tauri checks for
+          $requiredFiles = @(
+            "makensis.exe",
+            "Bin\makensis.exe",
+            "Stubs\lzma-x86-unicode",
+            "Stubs\lzma_solid-x86-unicode",
+            "Plugins\x86-unicode\additional\nsis_tauri_utils.dll",
+            "Include\MUI2.nsh",
+            "Include\FileFunc.nsh",
+            "Include\x64.nsh",
+            "Include\nsDialogs.nsh",
+            "Include\WinMessages.nsh",
+            "Include\Win\COM.nsh",
+            "Include\Win\Propkey.nsh",
+            "Include\Win\RestartManager.nsh"
+          )
+          $missing = @()
+          foreach ($f in $requiredFiles) {
+            $fullPath = Join-Path $tauriNsisCache $f
+            if (Test-Path $fullPath) {
+              Write-Host "OK: $f"
+            } else {
+              $missing += $f
+              Write-Host "MISSING: $f"
+            }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Listing NSIS cache contents:"
+            Get-ChildItem $tauriNsisCache -Recurse | Select-Object FullName
+            throw "Missing $($missing.Count) required NSIS files: $($missing -join ', ')"
+          }
+          Write-Host "Tauri NSIS cache ready at: $tauriNsisCache"
 
       - name: Build and package (NSIS)
         shell: pwsh
