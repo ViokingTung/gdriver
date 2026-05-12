@@ -142,62 +142,66 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Prepare clean NSIS cache for Tauri
+      - name: Install NSIS and prepare Tauri cache
         shell: pwsh
         run: |
           # Tauri v2 downloads NSIS from SourceForge to $LOCALAPPDATA/tauri/NSIS.
-          # Clear any stale cache so Tauri downloads a fresh copy.
+          # Both Chocolatey and Tauri's zip provide a stub makensis.exe (2.5KB).
+          # Download the official NSIS zip and find the real console compiler.
           $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
           if (Test-Path $tauriNsisCache) {
             Remove-Item -Recurse -Force $tauriNsisCache
-            Write-Host "Cleared stale NSIS cache"
           }
+
+          # Download and extract official NSIS from SourceForge
+          $nsisZip = "$env:TEMP\nsis-3.11.zip"
+          $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download"
+          Write-Host "Downloading NSIS from SourceForge..."
+          Invoke-WebRequest -Uri $nsisUrl -OutFile $nsisZip -MaximumRedirection 5
+          Write-Host "Extracting NSIS..."
+          Expand-Archive -Path $nsisZip -DestinationPath "$env:TEMP\nsis-extract" -Force
+          $nsisSrc = "$env:TEMP\nsis-extract\nsis-3.11"
+          if (-not (Test-Path $nsisSrc)) { $nsisSrc = "$env:TEMP\nsis-extract" }
+
+          # List all .exe files and their sizes to find the real compiler
+          Write-Host "=== NSIS executables ==="
+          Get-ChildItem $nsisSrc -Filter "*.exe" -Recurse |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize
+
+          # Copy to Tauri cache
+          New-Item -ItemType Directory -Force -Path $tauriNsisCache | Out-Null
+          Copy-Item -Path "$nsisSrc\*" -Destination $tauriNsisCache -Recurse -Force
+
+          # Find the largest .exe in the root (the real compiler)
+          $realCompiler = Get-ChildItem $tauriNsisCache -Filter "*.exe" |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+          Write-Host "Largest exe: $($realCompiler.Name) ($($realCompiler.Length) bytes)"
+
+          # Replace stub makensis.exe with the real compiler
+          New-Item -ItemType Directory -Force -Path "$tauriNsisCache\Bin" | Out-Null
+          if ($realCompiler.Name -ne "makensis.exe") {
+            Copy-Item $realCompiler.FullName "$tauriNsisCache\makensis.exe" -Force
+            Copy-Item $realCompiler.FullName "$tauriNsisCache\Bin\makensis.exe" -Force
+            Write-Host "Replaced makensis.exe with $($realCompiler.Name)"
+          }
+
+          # Download nsis_tauri_utils plugin (not included in official NSIS)
+          $pluginDir = "$tauriNsisCache\Plugins\x86-unicode\additional"
+          New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+          $dllUrl = "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
+          Invoke-WebRequest -Uri $dllUrl -OutFile "$pluginDir\nsis_tauri_utils.dll"
+
+          # Verify
+          $fi = Get-Item "$tauriNsisCache\makensis.exe"
+          Write-Host "Final makensis.exe size: $($fi.Length) bytes"
+          & "$tauriNsisCache\makensis.exe" /VERSION
+          Write-Host "NSIS cache ready at: $tauriNsisCache"
 
       - name: Build and package (NSIS)
         shell: pwsh
-        run: |
-          # Run build.ps1 which calls cargo tauri build.
-          # Tauri will download NSIS to $LOCALAPPDATA/tauri/NSIS automatically.
-          # After download, fix the stub makensis.exe if needed.
-          $ErrorActionPreference = "Continue"
-
-          # Start the build in the background so we can monitor and fix NSIS
-          $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-
-          # First, let Tauri download NSIS by running the build
-          # If it fails with os error 2, fix the stub and retry
-          Write-Host "=== Attempt 1: Running build.ps1 ==="
-          ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
-          $buildExit = $LASTEXITCODE
-
-          if ($buildExit -ne 0) {
-            Write-Host "Build failed (exit $buildExit). Checking NSIS cache..."
-            $makensis = "$tauriNsisCache\makensis.exe"
-            if (Test-Path $makensis) {
-              $fi = Get-Item $makensis
-              Write-Host "makensis.exe size: $($fi.Length) bytes"
-              if ($fi.Length -lt 10000) {
-                Write-Host "=== makensis.exe is a stub! Replacing with NSIS.exe ==="
-                $nsisExe = "$tauriNsisCache\NSIS.exe"
-                if (Test-Path $nsisExe) {
-                  Copy-Item $nsisExe $makensis -Force
-                  Copy-Item $nsisExe "$tauriNsisCache\Bin\makensis.exe" -Force
-                  $newFi = Get-Item $makensis
-                  Write-Host "Replaced! New size: $($newFi.Length) bytes"
-                } else {
-                  throw "NSIS.exe not found at $nsisExe"
-                }
-              }
-            }
-
-            Write-Host "=== Attempt 2: Running build.ps1 again ==="
-            ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
-            $buildExit = $LASTEXITCODE
-          }
-
-          if ($buildExit -ne 0) {
-            throw "Build failed with exit code $buildExit"
-          }
+        run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
 
       - name: Collect artifacts
         shell: pwsh
