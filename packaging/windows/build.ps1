@@ -6,7 +6,7 @@
 #   - Rust toolchain (rustup) with MSVC target
 #   - Node.js + pnpm
 #   - Tauri CLI: cargo install tauri-cli
-#   - NSIS: choco install nsis  (or from https://nsis.sourceforge.io/)
+#   - NSIS: set NSIS_DIR env var, or choco install nsis
 #   - (optional) WiX Toolset: choco install wixtoolset
 #   - (optional) Code signing certificate in Windows Certificate Store
 #
@@ -66,11 +66,38 @@ function Build-ShellExtension {
     Write-Step "  -> $TargetDir\gdriver_shell.dll"
 }
 
-# ── Preprocess NSIS template (fully manual, bypasses Tauri NSIS bundler) ──
-function Preprocess-NsisTemplate {
-    param([string] $BundleDir)
+# ── Verify NSIS compiler ────────────────────────────────────────────────
+function Assert-RealNsis {
+    # If NSIS_DIR is set, Tauri will use it directly (bypasses download).
+    # Verify the compiler is real (not a ~2.5KB stub from GitHub).
+    $makensisPath = $null
 
-    Write-Step "Preprocessing NSIS template (full manual mode)..."
+    if ($env:NSIS_DIR -and (Test-Path "$env:NSIS_DIR\makensis.exe")) {
+        $makensisPath = "$env:NSIS_DIR\makensis.exe"
+        Write-Step "Using NSIS from NSIS_DIR: $makensisPath"
+    }
+    elseif (Test-Path "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe") {
+        $makensisPath = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
+        Write-Step "Using NSIS from Tauri cache: $makensisPath"
+    }
+
+    if ($makensisPath) {
+        $size = (Get-Item $makensisPath).Length
+        Write-Step "  makensis.exe size: $size bytes"
+        if ($size -lt 100000) {
+            Write-Warn "  makensis.exe appears to be a STUB ($size bytes)."
+            Write-Warn "  Set NSIS_DIR to a real NSIS installation."
+            Write-Warn "  Download from: https://nsis.sourceforge.io/Download"
+        }
+    } else {
+        Write-Warn "NSIS compiler not found. Tauri will attempt to download."
+        Write-Warn "Set NSIS_DIR env var to skip download and use a local NSIS."
+    }
+}
+
+# ── Preprocess NSIS template ─────────────────────────────────────────────
+function Preprocess-NsisTemplate {
+    Write-Step "Preprocessing NSIS template..."
 
     $templateContent = Get-Content $NsisTemplate -Raw
 
@@ -78,97 +105,39 @@ function Preprocess-NsisTemplate {
     $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\\\'
     $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '\\\\'
 
-    # Read product info from tauri.conf.json
-    $tauriConf = Get-Content "$TauriDir\tauri.conf.json" -Raw | ConvertFrom-Json
-    $productName = $tauriConf.productName
-    $version     = $tauriConf.version
-
-    # Main binary name (Cargo package name, lowercase with hyphens → underscores)
-    $mainBinaryName = "gdriver"
-
-    # Resolve installer icon path
-    $iconRelPath = $tauriConf.bundle.windows.nsis.installerIcon
-    $iconAbsPath = (Resolve-Path "$TauriDir\$iconRelPath").Path -replace '\\', '\\\\'
-
-    Write-Step "  Product: $productName $version"
     Write-Step "  Daemon path: $daemonAbsPath"
     Write-Step "  Shell DLL path: $shellAbsPath"
-    Write-Step "  Icon path: $iconAbsPath"
 
-    # ── Replace custom placeholders ──
     $templateContent = $templateContent -replace '__DAEMON_BINARY__', $daemonAbsPath
     $templateContent = $templateContent -replace '__SHELL_DLL__', $shellAbsPath
 
-    # ── Replace Tauri built-in placeholders ──
-    $templateContent = $templateContent -replace '\{\{product_name\}\}', $productName
-    $templateContent = $templateContent -replace '\{\{version\}\}', $version
-    $templateContent = $templateContent -replace '\{\{main_binary_name\}\}', $mainBinaryName
-    $templateContent = $templateContent -replace '\{\{installer_icon\}\}', $iconAbsPath
-
-    # ── Generate {{#each binaries}} section ──
-    # Binaries = main executable only (daemon and shell DLL are handled separately)
-    $binaryFile = "$TargetDir\gdriver.exe"
-    if (-not (Test-Path $binaryFile)) {
-        throw "Main binary not found: $binaryFile"
-    }
-    $binaryAbsPath = $binaryFile -replace '\\', '\\\\'
-    $binariesFile = "    File `"/oname=$mainBinaryName.exe`" `"$binaryAbsPath`""
-    $binariesDelete = "    Delete `"`$INSTDIR\\$mainBinaryName.exe`""
-
-    # Replace first occurrence (install section) with File command
-    $eachBinariesPattern = '(?s)\{\{#each binaries\}\}.*?\{\{/each\}\}'
-    $templateContent = [regex]::Replace($templateContent, $eachBinariesPattern, $binariesFile + "`n", 1)
-    # Replace second occurrence (uninstall section) with Delete command
-    $templateContent = [regex]::Replace($templateContent, $eachBinariesPattern, $binariesDelete + "`n", 1)
-
-    # ── Generate {{#each resources}} section ──
-    # Resources = all files in bundle output EXCEPT the main .exe
-    $resourceFiles = @()
-    if (Test-Path $BundleDir) {
-        $resourceFiles = Get-ChildItem $BundleDir -Recurse -File |
-            Where-Object { $_.Extension -ne ".exe" -and $_.Extension -ne ".nsi" } |
-            ForEach-Object { $_.FullName }
-    }
-
-    if ($resourceFiles.Count -gt 0) {
-        $resourcesFileLines = @()
-        $resourcesDeleteLines = @()
-        foreach ($rf in $resourceFiles) {
-            $absPath = $rf -replace '\\', '\\\\'
-            $fileName = Split-Path $rf -Leaf
-            $resourcesFileLines += "    File `"/oname=$fileName`" `"$absPath`""
-            $resourcesDeleteLines += "    Delete `"`$INSTDIR\\$fileName`""
-        }
-        $resourcesFileSection = $resourcesFileLines -join "`n"
-        $resourcesDeleteSection = $resourcesDeleteLines -join "`n"
-    } else {
-        $resourcesFileSection = "    ; No additional resources"
-        $resourcesDeleteSection = "    ; No additional resources"
-    }
-
-    # Replace first occurrence (install section) with File commands
-    $eachResourcesPattern = '(?s)\{\{#each resources\}\}.*?\{\{/each\}\}'
-    $templateContent = [regex]::Replace($templateContent, $eachResourcesPattern, $resourcesFileSection + "`n", 1)
-    # Replace second occurrence (uninstall section) with Delete commands
-    $templateContent = [regex]::Replace($templateContent, $eachResourcesPattern, $resourcesDeleteSection + "`n", 1)
-
-    # Write preprocessed template
+    # Write preprocessed template next to original
     $processedPath = "$ScriptDir\nsis\installer.processed.nsi"
     $templateContent | Set-Content $processedPath -NoNewline
 
     Write-Step "  -> $processedPath"
-    Write-Step "  Template size: $((Get-Item $processedPath).Length) bytes"
     return $processedPath
 }
 
-# ── Build Tauri app (without NSIS bundling) ───────────────────────────────
+# ── Update tauri.conf.json to use processed template ─────────────────────
+function Set-TauriTemplate {
+    param([string] $TemplatePath)
+
+    $tauriConfPath = "$TauriDir\tauri.conf.json"
+    $text = Get-Content $tauriConfPath -Raw
+
+    # Use absolute path — Tauri resolves relative paths from cwd, not from tauri.conf.json
+    $absTemplatePath = (Resolve-Path $TemplatePath).Path -replace '\\', '/'
+
+    $text = $text -replace '"template"\s*:\s*"[^"]*"', "`"template`": `"$absTemplatePath`""
+
+    Set-Content $tauriConfPath $text -NoNewline
+    Write-Step "  Updated tauri.conf.json to use template: $absTemplatePath"
+}
+
+# ── Build Tauri app ──────────────────────────────────────────────────────
 function Invoke-TauriBuild {
     Write-Step "Building Tauri desktop app (release)..."
-
-    # For NSIS mode, build only the app bundle (not NSIS).
-    # NSIS compilation is done separately with the real compiler.
-    $tauriBundleMode = if ($BuildMode -eq "nsis") { "app" } else { $BuildMode }
-
     Push-Location "$ProjectRoot\apps\gdriver-app"
 
     # Ensure frontend deps
@@ -181,9 +150,9 @@ function Invoke-TauriBuild {
     pnpm build
     if ($LASTEXITCODE -ne 0) { throw "pnpm build failed with exit code $LASTEXITCODE" }
 
-    # Tauri build
-    Write-Step "  cargo tauri build --bundles $tauriBundleMode"
-    cargo tauri build --bundles $tauriBundleMode
+    # Tauri build (uses NSIS from NSIS_DIR if set, otherwise downloads)
+    Write-Step "  cargo tauri build --bundles $BuildMode"
+    cargo tauri build --bundles $BuildMode
     if ($LASTEXITCODE -ne 0) {
         Pop-Location
         throw "Tauri build failed with exit code $LASTEXITCODE"
@@ -191,97 +160,30 @@ function Invoke-TauriBuild {
 
     Pop-Location
 
-    # Find the bundle output directory
+    # Find the generated installer (Tauri outputs to workspace target dir)
     $bundleDir = "$TargetDir\bundle"
     if (-not (Test-Path $bundleDir)) {
+        # Fallback: check app-specific target dir
         $bundleDir = "$TauriDir\target\release\bundle"
     }
-
     if ($BuildMode -eq "msi") {
-        $installer = Get-ChildItem "$bundleDir\msi\*.msi" -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    } elseif ($BuildMode -eq "nsis") {
-        # For NSIS mode, we compile separately — return the app bundle dir
-        $installer = $null
+        $installer = Get-ChildItem "$bundleDir\msi\*.msi" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     } else {
-        $installer = Get-ChildItem "$bundleDir\nsis\*.exe" -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $installer = Get-ChildItem "$bundleDir\nsis\*.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
 
     if ($installer) {
         Write-Step "  Installer: $($installer.FullName)"
     }
-    return $installer
-}
-
-# ── Compile NSIS installer with real compiler ─────────────────────────────
-function Invoke-NsisCompile {
-    param([string] $ProcessedTemplate)
-
-    Write-Step "Compiling NSIS installer with real compiler..."
-
-    # Find real NSIS compiler
-    # Priority: 1) NSIS_DIR env var, 2) Tauri cache (after CI replacement), 3) PATH
-    $makensisPath = $null
-
-    if ($env:NSIS_DIR -and (Test-Path "$env:NSIS_DIR\makensis.exe")) {
-        $makensisPath = "$env:NSIS_DIR\makensis.exe"
-        Write-Step "  Using NSIS from NSIS_DIR: $makensisPath"
-    }
-    elseif (Test-Path "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe") {
-        $makensisPath = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
-        Write-Step "  Using NSIS from Tauri cache: $makensisPath"
-    }
-    else {
-        $makensisPath = (Get-Command makensis.exe -ErrorAction SilentlyContinue).Source
-        if ($makensisPath) {
-            Write-Step "  Using NSIS from PATH: $makensisPath"
-        }
-    }
-
-    if (-not $makensisPath) {
-        throw "NSIS compiler (makensis.exe) not found. Install NSIS or set NSIS_DIR."
-    }
-
-    # Verify it's the real compiler (stub is ~2.5KB, real is >1MB)
-    $compilerSize = (Get-Item $makensisPath).Length
-    Write-Step "  Compiler size: $compilerSize bytes"
-    if ($compilerSize -lt 100000) {
-        throw "makensis.exe appears to be a stub ($compilerSize bytes). Need real NSIS compiler."
-    }
-
-    # Run makensis
-    Write-Step "  Running: & `"$makensisPath`" /V3 /INPUTCHARSET UTF8 /OUTPUTCHARSET UTF8 `"$ProcessedTemplate`""
-    & $makensisPath /V3 /INPUTCHARSET UTF8 /OUTPUTCHARSET UTF8 $ProcessedTemplate
-    if ($LASTEXITCODE -ne 0) {
-        throw "NSIS compilation failed with exit code $LASTEXITCODE"
-    }
-
-    # Find the generated installer
-    # NSIS outputs to the directory of the .nsi script (packaging/windows/nsis/)
-    $installer = Get-ChildItem "$ScriptDir\nsis\*.exe" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-
-    if (-not $installer) {
-        # Also check the current directory (where makensis ran)
-        $installer = Get-ChildItem "*.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match "setup|install" } |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    }
-
-    if ($installer) {
-        Write-Step "  Installer: $($installer.FullName)"
-    } else {
-        Write-Warn "  Installer .exe not found after compilation"
-    }
-
     return $installer
 }
 
 # ── Restore tauri.conf.json ──────────────────────────────────────────────
 function Restore-TauriConf {
-    # No longer needed — we don't modify tauri.conf.json
-    # (kept as no-op for backward compatibility)
+    $tauriConfPath = "$TauriDir\tauri.conf.json"
+    $text = Get-Content $tauriConfPath -Raw
+    $text = $text -replace '"template"\s*:\s*"[^"]*"', '"template": "../../../packaging/windows/nsis/installer.nsi"'
+    Set-Content $tauriConfPath $text -NoNewline
 }
 
 # ── Code signing ─────────────────────────────────────────────────────────
@@ -359,55 +261,55 @@ function Main {
     Write-Step "Project root : $ProjectRoot"
     Write-Step "Build mode   : $BuildMode"
 
-    # 1. Build dependencies
+    # 1. Verify NSIS compiler
+    if ($BuildMode -ne "msi") {
+        Assert-RealNsis
+    }
+
+    # 2. Build dependencies
     Build-Daemon
     Build-ShellExtension
 
-    # 2. Build Tauri app
-    # For NSIS mode: build only the app bundle (--bundles app), then compile
-    # NSIS separately with the real compiler (bypasses Tauri's stub NSIS).
-    $installer = Invoke-TauriBuild
+    # 3. Preprocess NSIS template
+    if ($BuildMode -ne "msi") {
+        $processedTemplate = Preprocess-NsisTemplate
+        Set-TauriTemplate -TemplatePath $processedTemplate
 
-    # 3. For NSIS mode: preprocess template and compile with real NSIS
-    if ($BuildMode -eq "nsis") {
-        # Find the Tauri bundle output directory (contains gdriver.exe + resources)
-        $bundleDir = "$TargetDir\bundle\app"
-        if (-not (Test-Path $bundleDir)) {
-            $bundleDir = "$TauriDir\target\release\bundle\app"
-        }
-        if (-not (Test-Path $bundleDir)) {
-            # Fallback: check for any bundle output
-            $bundleDir = "$TargetDir\bundle"
-            if (-not (Test-Path $bundleDir)) {
-                $bundleDir = "$TauriDir\target\release\bundle"
-            }
+        # Debug: verify template preprocessing
+        if (Test-Path $processedTemplate) {
+            Write-Step "  Processed template exists: $processedTemplate"
+            Write-Step "  Template size: $((Get-Item $processedTemplate).Length) bytes"
+        } else {
+            throw "Processed template not found: $processedTemplate"
         }
 
-        Write-Step "Bundle directory: $bundleDir"
-        if (Test-Path $bundleDir) {
-            Get-ChildItem $bundleDir -Recurse -File |
-                Select-Object FullName, Length |
-                Format-Table -AutoSize
+        # Debug: verify tauri.conf.json was updated
+        $tauriConf = Get-Content "$TauriDir\tauri.conf.json" -Raw
+        if ($tauriConf -match '"template"\s*:\s*"([^"]+)"') {
+            Write-Step "  tauri.conf.json template: $($Matches[1])"
+        } else {
+            Write-Warn "  Could not find template path in tauri.conf.json"
         }
-
-        # Preprocess NSIS template (replaces ALL Tauri + custom variables)
-        $processedTemplate = Preprocess-NsisTemplate -BundleDir $bundleDir
-
-        # Compile NSIS installer with real compiler
-        $installer = Invoke-NsisCompile -ProcessedTemplate $processedTemplate
     }
 
-    # 4. Code sign
-    if ($installer) {
-        Invoke-CodeSign -InstallerPath $installer.FullName
+    # 4. Build Tauri app + installer
+    try {
+        $installer = Invoke-TauriBuild
+
+        # 5. Code sign
+        if ($installer) {
+            Invoke-CodeSign -InstallerPath $installer.FullName
+        }
+    }
+    finally {
+        # Always restore original config
+        if ($BuildMode -ne "msi") {
+            Restore-TauriConf
+        }
     }
 
     Write-Step "=== Packaging complete ==="
-    if ($installer) {
-        Write-Step "Installer: $($installer.FullName)"
-    } else {
-        Write-Step "Output: $TargetDir\bundle\"
-    }
+    Write-Step "Output: $TauriDir\target\release\bundle\"
 }
 
 Main

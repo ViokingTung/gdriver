@@ -147,9 +147,9 @@ jobs:
         run: |
           # Download the real NSIS compiler from SourceForge.
           # Tauri's GitHub binary-releases contains a STUB makensis.exe (~2.5KB)
-          # that cannot compile NSIS scripts. build.ps1 bypasses Tauri's NSIS
-          # bundler entirely and invokes makensis.exe directly.
-          $nsisDir = "$env:LOCALAPPDATA\tauri\NSIS"
+          # that cannot compile NSIS scripts. By setting NSIS_DIR, Tauri's
+          # NSIS bundler will use our real compiler instead of downloading.
+          $nsisDir = "$env:USERPROFILE\.nsis"
           if (Test-Path $nsisDir) {
             Remove-Item -Recurse -Force $nsisDir
           }
@@ -175,7 +175,7 @@ jobs:
           $nsisSrc = "$extractDir\nsis-3.11"
           if (-not (Test-Path $nsisSrc)) { $nsisSrc = $extractDir }
 
-          # Copy to Tauri cache directory (build.ps1 looks here)
+          # Copy to NSIS_DIR
           New-Item -ItemType Directory -Force -Path $nsisDir | Out-Null
           Copy-Item -Path "$nsisSrc\*" -Destination $nsisDir -Recurse -Force
 
@@ -189,7 +189,10 @@ jobs:
           $compiler = Get-Item "$nsisDir\makensis.exe"
           Write-Host "makensis.exe size: $($compiler.Length) bytes"
           & "$nsisDir\makensis.exe" /VERSION
-          Write-Host "NSIS ready at: $nsisDir"
+
+          # Export NSIS_DIR for subsequent steps (Tauri reads this)
+          echo "NSIS_DIR=$nsisDir" >> $env:GITHUB_ENV
+          Write-Host "NSIS_DIR set to: $nsisDir"
 
       - name: Build and package (NSIS)
         shell: pwsh
@@ -199,13 +202,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/windows
-          # Tauri bundle output (if Tauri NSIS bundler was used)
           Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
             Copy-Item -Destination dist/windows/
           Get-ChildItem -Path "apps/gdriver-app/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
-            Copy-Item -Destination dist/windows/
-          # Manual NSIS compilation output (packaging/windows/nsis/)
-          Get-ChildItem -Path "packaging/windows/nsis" -Filter "*setup*.exe" -ErrorAction SilentlyContinue |
             Copy-Item -Destination dist/windows/
 
       - name: Generate SHA-256 checksums
