@@ -202,6 +202,30 @@ jobs:
           }
           Write-Host "Tauri NSIS cache ready at: $tauriNsisCache"
 
+      - name: Verify makensis.exe is executable
+        shell: pwsh
+        run: |
+          $makensis = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
+          Write-Host "Checking: $makensis"
+          if (Test-Path $makensis) {
+            $fi = Get-Item $makensis
+            Write-Host "Size: $($fi.Length) bytes"
+            Write-Host "LastWriteTime: $($fi.LastWriteTime)"
+            try {
+              & $makensis /VERSION
+              Write-Host "makensis.exe is executable"
+            } catch {
+              Write-Host "makensis.exe FAILED to execute: $_"
+            }
+          } else {
+            Write-Host "makensis.exe NOT FOUND"
+          }
+          Write-Host ""
+          Write-Host "Full NSIS cache directory listing:"
+          Get-ChildItem "$env:LOCALAPPDATA\tauri\NSIS" -Recurse -File |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize
+
       - name: Build and package (NSIS)
         shell: pwsh
         run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
