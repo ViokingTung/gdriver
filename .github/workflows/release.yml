@@ -146,11 +146,18 @@ jobs:
         shell: pwsh
         run: |
           choco install nsis -y
-          & "C:\Program Files (x86)\NSIS\makensis.exe" /VERSION
-          # Pre-populate Tauri's NSIS cache directory
+          $nsisDir = "C:\Program Files (x86)\NSIS"
+          & "$nsisDir\makensis.exe" /VERSION
+          if (-not (Test-Path "$nsisDir\makensis.exe")) {
+            throw "makensis.exe not found at $nsisDir"
+          }
+          # Set NSIS_DIR so Tauri bundler can find NSIS directly
+          echo "NSIS_DIR=$nsisDir" >> $env:GITHUB_ENV
+          Write-Host "NSIS_DIR set to: $nsisDir"
+          # Also pre-populate Tauri's NSIS cache directory
           $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
           New-Item -ItemType Directory -Force -Path $tauriNsisCache
-          Copy-Item -Path "C:\Program Files (x86)\NSIS\*" -Destination $tauriNsisCache -Recurse -Force
+          Copy-Item -Path "$nsisDir\*" -Destination $tauriNsisCache -Recurse -Force
           Write-Host "Tauri NSIS cache populated at: $tauriNsisCache"
           Get-ChildItem $tauriNsisCache | Select-Object Name
 
