@@ -5,8 +5,8 @@
   "description": "Cross-platform Google Drive desktop client",
   "license": "Apache-2.0",
   "scripts": {
-    "dev": "pnpm -C apps/gdriver-app tauri dev",
-    "build": "pnpm -C apps/gdriver-app build",
+    "dev": "cargo build -p gdriver-daemon && pnpm -C apps/gdriver-app tauri dev",
+    "build": "cargo build -p gdriver-daemon --release && pnpm -C apps/gdriver-app build",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"apps/**/*.{ts,tsx,css,json}\""
   },
