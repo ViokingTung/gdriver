@@ -142,72 +142,54 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Install NSIS and prepare Tauri cache
+      - name: Install NSIS from SourceForge
         shell: pwsh
         run: |
-          # Tauri v2 downloads NSIS to $LOCALAPPDATA/tauri/NSIS and uses
-          # its own stub makensis.exe. We pre-populate this cache with the
-          # full NSIS distribution from SourceForge.
-          $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-          if (Test-Path $tauriNsisCache) {
-            Remove-Item -Recurse -Force $tauriNsisCache
+          # Download the real NSIS compiler from SourceForge.
+          # Tauri's GitHub binary-releases contains a STUB makensis.exe (~2.5KB)
+          # that cannot compile NSIS scripts. build.ps1 bypasses Tauri's NSIS
+          # bundler entirely and invokes makensis.exe directly.
+          $nsisDir = "$env:LOCALAPPDATA\tauri\NSIS"
+          if (Test-Path $nsisDir) {
+            Remove-Item -Recurse -Force $nsisDir
           }
 
-          # Download NSIS using curl (Invoke-WebRequest fails with SourceForge redirects)
           $nsisZip = "$env:TEMP\nsis-3.11.zip"
           $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download"
           Write-Host "Downloading NSIS from SourceForge..."
           curl.exe -L -o $nsisZip $nsisUrl
           if ($LASTEXITCODE -ne 0) { throw "NSIS download failed" }
 
-          # Verify it's a real zip (not an HTML error page)
+          # Verify download is a real zip
           $fileInfo = Get-Item $nsisZip
           Write-Host "Downloaded file size: $($fileInfo.Length) bytes"
           if ($fileInfo.Length -lt 100000) {
-            throw "Downloaded file is too small ($($fileInfo.Length) bytes) - likely not a valid zip"
+            throw "Downloaded file too small ($($fileInfo.Length) bytes) - likely not a valid zip"
           }
 
-          # Extract NSIS
+          # Extract
           Write-Host "Extracting NSIS..."
-          Expand-Archive -Path $nsisZip -DestinationPath "$env:TEMP\nsis-extract" -Force
-          $nsisSrc = "$env:TEMP\nsis-extract\nsis-3.11"
-          if (-not (Test-Path $nsisSrc)) { $nsisSrc = "$env:TEMP\nsis-extract" }
+          $extractDir = "$env:TEMP\nsis-extract"
+          if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
+          Expand-Archive -Path $nsisZip -DestinationPath $extractDir -Force
+          $nsisSrc = "$extractDir\nsis-3.11"
+          if (-not (Test-Path $nsisSrc)) { $nsisSrc = $extractDir }
 
-          # List all .exe files to understand the structure
-          Write-Host "=== NSIS executables ==="
-          Get-ChildItem $nsisSrc -Filter "*.exe" -Recurse |
-            Select-Object FullName, Length |
-            Format-Table -AutoSize
-
-          # Copy to Tauri cache
-          New-Item -ItemType Directory -Force -Path $tauriNsisCache | Out-Null
-          Copy-Item -Path "$nsisSrc\*" -Destination $tauriNsisCache -Recurse -Force
-
-          # Find the largest .exe in the root (the real compiler)
-          $realCompiler = Get-ChildItem $tauriNsisCache -Filter "*.exe" |
-            Sort-Object Length -Descending |
-            Select-Object -First 1
-          Write-Host "Largest exe: $($realCompiler.Name) ($($realCompiler.Length) bytes)"
-
-          # Replace stub makensis.exe with the real compiler
-          New-Item -ItemType Directory -Force -Path "$tauriNsisCache\Bin" | Out-Null
-          if ($realCompiler.Name -ne "makensis.exe") {
-            Copy-Item $realCompiler.FullName "$tauriNsisCache\makensis.exe" -Force
-            Copy-Item $realCompiler.FullName "$tauriNsisCache\Bin\makensis.exe" -Force
-            Write-Host "Replaced makensis.exe with $($realCompiler.Name)"
-          }
+          # Copy to Tauri cache directory (build.ps1 looks here)
+          New-Item -ItemType Directory -Force -Path $nsisDir | Out-Null
+          Copy-Item -Path "$nsisSrc\*" -Destination $nsisDir -Recurse -Force
 
           # Download nsis_tauri_utils plugin (not included in official NSIS)
-          $pluginDir = "$tauriNsisCache\Plugins\x86-unicode\additional"
+          $pluginDir = "$nsisDir\Plugins\x86-unicode\additional"
           New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
           $dllUrl = "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
           Invoke-WebRequest -Uri $dllUrl -OutFile "$pluginDir\nsis_tauri_utils.dll"
 
-          # Verify
-          $fi = Get-Item "$tauriNsisCache\makensis.exe"
-          Write-Host "Final makensis.exe size: $($fi.Length) bytes"
-          & "$tauriNsisCache\makensis.exe" /VERSION
-          Write-Host "NSIS cache ready at: $tauriNsisCache"
+          # Verify real compiler
+          $compiler = Get-Item "$nsisDir\makensis.exe"
+          Write-Host "makensis.exe size: $($compiler.Length) bytes"
+          & "$nsisDir\makensis.exe" /VERSION
+          Write-Host "NSIS ready at: $nsisDir"
 
       - name: Build and package (NSIS)
         shell: pwsh
@@ -217,9 +199,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/windows
+          # Tauri bundle output (if Tauri NSIS bundler was used)
           Get-ChildItem -Path "target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
             Copy-Item -Destination dist/windows/
           Get-ChildItem -Path "apps/gdriver-app/src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Copy-Item -Destination dist/windows/
+          # Manual NSIS compilation output (packaging/windows/nsis/)
+          Get-ChildItem -Path "packaging/windows/nsis" -Filter "*setup*.exe" -ErrorAction SilentlyContinue |
             Copy-Item -Destination dist/windows/
 
       - name: Generate SHA-256 checksums
