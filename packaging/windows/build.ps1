@@ -68,30 +68,20 @@ function Build-ShellExtension {
 
 # ── Verify NSIS compiler ────────────────────────────────────────────────
 function Assert-RealNsis {
-    # If NSIS_DIR is set, Tauri will use it directly (bypasses download).
+    # Tauri caches NSIS at %LOCALAPPDATA%\tauri\NSIS.
     # Verify the compiler is real (not a ~2.5KB stub from GitHub).
-    $makensisPath = $null
+    $makensisPath = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
 
-    if ($env:NSIS_DIR -and (Test-Path "$env:NSIS_DIR\makensis.exe")) {
-        $makensisPath = "$env:NSIS_DIR\makensis.exe"
-        Write-Step "Using NSIS from NSIS_DIR: $makensisPath"
-    }
-    elseif (Test-Path "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe") {
-        $makensisPath = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
-        Write-Step "Using NSIS from Tauri cache: $makensisPath"
-    }
-
-    if ($makensisPath) {
+    if (Test-Path $makensisPath) {
         $size = (Get-Item $makensisPath).Length
-        Write-Step "  makensis.exe size: $size bytes"
+        Write-Step "NSIS compiler: $makensisPath ($size bytes)"
         if ($size -lt 100000) {
             Write-Warn "  makensis.exe appears to be a STUB ($size bytes)."
-            Write-Warn "  Set NSIS_DIR to a real NSIS installation."
-            Write-Warn "  Download from: https://nsis.sourceforge.io/Download"
+            Write-Warn "  CI should pre-populate the cache with real NSIS from SourceForge."
         }
     } else {
-        Write-Warn "NSIS compiler not found. Tauri will attempt to download."
-        Write-Warn "Set NSIS_DIR env var to skip download and use a local NSIS."
+        Write-Warn "NSIS compiler not found at: $makensisPath"
+        Write-Warn "Tauri will download from GitHub (contains stub compiler)."
     }
 }
 
