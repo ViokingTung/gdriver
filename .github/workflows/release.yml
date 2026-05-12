@@ -146,19 +146,58 @@ jobs:
         shell: pwsh
         run: |
           # Tauri v2 downloads NSIS from SourceForge to $LOCALAPPDATA/tauri/NSIS.
-          # We must NOT pre-populate this cache with Chocolatey's NSIS because
-          # Chocolatey provides stub launchers (2.5KB) instead of the real compiler.
-          # Instead, clear any stale cache and let Tauri download the real NSIS zip.
+          # Clear any stale cache so Tauri downloads a fresh copy.
           $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
           if (Test-Path $tauriNsisCache) {
             Remove-Item -Recurse -Force $tauriNsisCache
-            Write-Host "Cleared stale NSIS cache at: $tauriNsisCache"
+            Write-Host "Cleared stale NSIS cache"
           }
-          # Tauri will download nsis-3.11.zip and nsis_tauri_utils.dll automatically
 
       - name: Build and package (NSIS)
         shell: pwsh
-        run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+        run: |
+          # Run build.ps1 which calls cargo tauri build.
+          # Tauri will download NSIS to $LOCALAPPDATA/tauri/NSIS automatically.
+          # After download, fix the stub makensis.exe if needed.
+          $ErrorActionPreference = "Continue"
+
+          # Start the build in the background so we can monitor and fix NSIS
+          $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+
+          # First, let Tauri download NSIS by running the build
+          # If it fails with os error 2, fix the stub and retry
+          Write-Host "=== Attempt 1: Running build.ps1 ==="
+          ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+          $buildExit = $LASTEXITCODE
+
+          if ($buildExit -ne 0) {
+            Write-Host "Build failed (exit $buildExit). Checking NSIS cache..."
+            $makensis = "$tauriNsisCache\makensis.exe"
+            if (Test-Path $makensis) {
+              $fi = Get-Item $makensis
+              Write-Host "makensis.exe size: $($fi.Length) bytes"
+              if ($fi.Length -lt 10000) {
+                Write-Host "=== makensis.exe is a stub! Replacing with NSIS.exe ==="
+                $nsisExe = "$tauriNsisCache\NSIS.exe"
+                if (Test-Path $nsisExe) {
+                  Copy-Item $nsisExe $makensis -Force
+                  Copy-Item $nsisExe "$tauriNsisCache\Bin\makensis.exe" -Force
+                  $newFi = Get-Item $makensis
+                  Write-Host "Replaced! New size: $($newFi.Length) bytes"
+                } else {
+                  throw "NSIS.exe not found at $nsisExe"
+                }
+              }
+            }
+
+            Write-Host "=== Attempt 2: Running build.ps1 again ==="
+            ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+            $buildExit = $LASTEXITCODE
+          }
+
+          if ($buildExit -ne 0) {
+            throw "Build failed with exit code $buildExit"
+          }
 
       - name: Collect artifacts
         shell: pwsh
