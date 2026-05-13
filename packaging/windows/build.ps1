@@ -100,9 +100,9 @@ function Preprocess-NsisTemplate {
 
     $templateContent = Get-Content $NsisTemplate -Raw
 
-    # NSIS requires double-backslash in paths: D:\foo → D:\\foo
-    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\\\'
-    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '\\\\'
+    # Use forward slashes for NSIS paths (avoids backslash escaping issues)
+    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '/'
+    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '/'
 
     Write-Step "  Daemon path: $daemonAbsPath"
     Write-Step "  Shell DLL path: $shellAbsPath"
@@ -286,6 +286,17 @@ function Main {
         $tauriConf = Get-Content "$TauriDir\tauri.conf.json" -Raw
         if ($tauriConf -match '"template"\s*:\s*"([^"]+)"') {
             Write-Step "  tauri.conf.json template: $($Matches[1])"
+            # Verify template file exists
+            $tplPath = $Matches[1]
+            if (Test-Path $tplPath) {
+                Write-Step "  Template file exists: $tplPath"
+                # Show first few lines with daemon/shell paths
+                Get-Content $tplPath | Select-String "DAEMON_BINARY|SHELL_DLL" | ForEach-Object {
+                    Write-Step "    $_"
+                }
+            } else {
+                Write-Err "  Template file NOT found: $tplPath"
+            }
         } else {
             Write-Warn "  Could not find template path in tauri.conf.json"
         }
