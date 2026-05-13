@@ -154,8 +154,11 @@ jobs:
 
           # Attempt 1: let Tauri download NSIS (will fail on stub)
           Write-Host "=== Attempt 1: trigger NSIS download ==="
-          $ErrorActionPreference = "Continue"
-          ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+          try {
+            ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+          } catch {
+            Write-Host "Attempt 1 failed (expected): $_"
+          }
           Write-Host "Attempt 1 done"
 
           # Replace stub makensis.exe with NSIS.exe
