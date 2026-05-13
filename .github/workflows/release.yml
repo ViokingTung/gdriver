@@ -201,10 +201,10 @@ jobs:
               Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
               Write-Host "Copied zlib1.dll"
             }
-            # makensis.exe looks for Stubs/Include/Plugins in its PARENT directory
-            # (NSISDIR is removed by Tauri). Copy resources to parent.
+            # makensis.exe looks for Stubs/Include/Plugins/Contrib in its PARENT
+            # directory (NSISDIR is removed by Tauri). Copy all resources to parent.
             $nsisParent = Split-Path $nsisCache
-            foreach ($dir in @("Stubs", "Include", "Plugins")) {
+            foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
               $src = Join-Path $nsisCache $dir
               $dst = Join-Path $nsisParent $dir
               if ((Test-Path $src) -and -not (Test-Path $dst)) {
@@ -229,7 +229,7 @@ jobs:
                 Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
               }
               $nsisParent = Split-Path $nsisCache
-              foreach ($dir in @("Stubs", "Include", "Plugins")) {
+              foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
                 $src = Join-Path $nsisCache $dir
                 $dst = Join-Path $nsisParent $dir
                 if ((Test-Path $src) -and -not (Test-Path $dst)) {
