@@ -69,15 +69,24 @@ function Build-ShellExtension {
 # ── Verify NSIS compiler ────────────────────────────────────────────────
 function Assert-RealNsis {
     # Tauri caches NSIS at %LOCALAPPDATA%\tauri\NSIS.
-    # Verify the compiler is real (not a ~2.5KB stub from GitHub).
+    # GitHub binary-releases and SourceForge both ship a STUB makensis.exe (~2.5KB)
+    # that cannot compile. The real console compiler is NSIS.exe.
     $makensisPath = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
 
     if (Test-Path $makensisPath) {
         $size = (Get-Item $makensisPath).Length
         Write-Step "NSIS compiler: $makensisPath ($size bytes)"
         if ($size -lt 100000) {
-            Write-Warn "  makensis.exe appears to be a STUB ($size bytes)."
-            Write-Warn "  CI should pre-populate the cache with real NSIS from SourceForge."
+            Write-Warn "  makensis.exe is a STUB ($size bytes). Replacing with NSIS.exe..."
+            $nsisExe = "$env:LOCALAPPDATA\tauri\NSIS\NSIS.exe"
+            if (Test-Path $nsisExe) {
+                $nsisSize = (Get-Item $nsisExe).Length
+                Copy-Item $nsisExe $makensisPath -Force
+                Copy-Item $nsisExe "$env:LOCALAPPDATA\tauri\NSIS\Bin\makensis.exe" -Force
+                Write-Step "  Replaced stub with NSIS.exe ($nsisSize bytes)"
+            } else {
+                Write-Err "  NSIS.exe not found! Cannot fix stub compiler."
+            }
         }
     } else {
         Write-Warn "NSIS compiler not found at: $makensisPath"

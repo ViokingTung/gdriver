@@ -142,127 +142,42 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Install NSIS from SourceForge
-        shell: pwsh
-        run: |
-          # Tauri v2's NSIS bundler downloads NSIS from GitHub binary-releases,
-          # which contains a STUB makensis.exe (~2.5KB) that can't compile.
-          #
-          # Tauri checks the cache at %LOCALAPPDATA%\tauri\NSIS and verifies
-          # these 13 files exist (NSIS_REQUIRED_FILES):
-          #   makensis.exe, Bin/makensis.exe, Stubs/lzma-x86-unicode,
-          #   Stubs/lzma_solid-x86-unicode, Plugins/x86-unicode/additional/nsis_tauri_utils.dll,
-          #   Include/MUI2.nsh, Include/FileFunc.nsh, Include/x64.nsh,
-          #   Include/nsDialogs.nsh, Include/WinMessages.nsh,
-          #   Include/Win/COM.nsh, Include/Win/Propkey.nsh, Include/Win/RestartManager.nsh
-          #
-          # If ANY file is missing → Tauri deletes the entire directory and
-          # re-downloads the stub from GitHub.
-          #
-          # Fix: pre-populate the cache with real NSIS from SourceForge +
-          # the nsis_tauri_utils plugin from GitHub. Since ALL required files
-          # will be present, Tauri skips the download entirely.
-
-          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-          Write-Host "Tauri NSIS cache: $nsisCache"
-
-          # Clean slate
-          if (Test-Path $nsisCache) {
-            Remove-Item -Recurse -Force $nsisCache
-          }
-
-          # ── Download real NSIS from SourceForge ──
-          $nsisZip = "$env:TEMP\nsis-3.11.zip"
-          $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11.zip/download"
-          Write-Host "Downloading real NSIS from SourceForge..."
-          curl.exe -L -o $nsisZip $nsisUrl
-          if ($LASTEXITCODE -ne 0) { throw "NSIS download failed" }
-
-          $fileInfo = Get-Item $nsisZip
-          Write-Host "Downloaded file size: $($fileInfo.Length) bytes"
-          if ($fileInfo.Length -lt 100000) {
-            throw "Downloaded file too small ($($fileInfo.Length) bytes) - likely not a valid zip"
-          }
-
-          # Extract
-          Write-Host "Extracting NSIS..."
-          $extractDir = "$env:TEMP\nsis-extract"
-          if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
-          Expand-Archive -Path $nsisZip -DestinationPath $extractDir -Force
-          $nsisSrc = "$extractDir\nsis-3.11"
-          if (-not (Test-Path $nsisSrc)) { $nsisSrc = $extractDir }
-
-          # Copy to Tauri cache
-          New-Item -ItemType Directory -Force -Path $nsisCache | Out-Null
-          Copy-Item -Path "$nsisSrc\*" -Destination $nsisCache -Recurse -Force
-
-          # ── Ensure ALL 13 required files exist ──
-
-          # 1. Bin/makensis.exe — SourceForge may not include this
-          New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
-          if (-not (Test-Path "$nsisCache\Bin\makensis.exe")) {
-            Copy-Item "$nsisCache\makensis.exe" "$nsisCache\Bin\makensis.exe"
-            Write-Host "Created Bin/makensis.exe"
-          }
-
-          # 2. Stubs — SourceForge includes these, but verify
-          foreach ($stub in @("Stubs/lzma-x86-unicode", "Stubs/lzma_solid-x86-unicode")) {
-            $stubPath = Join-Path $nsisCache $stub
-            if (-not (Test-Path $stubPath)) {
-              Write-Host "WARNING: Missing stub: $stub"
-            } else {
-              Write-Host "  Found: $stub"
-            }
-          }
-
-          # 3. nsis_tauri_utils.dll — NOT in official NSIS, download from GitHub
-          # Tauri verifies SHA1 hash of this file, so download the exact version
-          $pluginDir = "$nsisCache\Plugins\x86-unicode\additional"
-          New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
-          $dllUrl = "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
-          Write-Host "Downloading nsis_tauri_utils.dll..."
-          Invoke-WebRequest -Uri $dllUrl -OutFile "$pluginDir\nsis_tauri_utils.dll"
-
-          # ── Verify all required files ──
-          $requiredFiles = @(
-            "makensis.exe",
-            "Bin/makensis.exe",
-            "Stubs/lzma-x86-unicode",
-            "Stubs/lzma_solid-x86-unicode",
-            "Plugins/x86-unicode/additional/nsis_tauri_utils.dll",
-            "Include/MUI2.nsh",
-            "Include/FileFunc.nsh",
-            "Include/x64.nsh",
-            "Include/nsDialogs.nsh",
-            "Include/WinMessages.nsh",
-            "Include/Win/COM.nsh",
-            "Include/Win/Propkey.nsh",
-            "Include/Win/RestartManager.nsh"
-          )
-          $allPresent = $true
-          foreach ($f in $requiredFiles) {
-            $p = Join-Path $nsisCache $f
-            if (Test-Path $p) {
-              $sz = (Get-Item $p).Length
-              Write-Host "  OK: $f ($sz bytes)"
-            } else {
-              Write-Host "  MISSING: $f"
-              $allPresent = $false
-            }
-          }
-          if (-not $allPresent) {
-            throw "Some required NSIS files are missing!"
-          }
-
-          # Verify compiler works
-          $compiler = Get-Item "$nsisCache\makensis.exe"
-          Write-Host "makensis.exe size: $($compiler.Length) bytes"
-          & "$nsisCache\makensis.exe" /VERSION
-          Write-Host "NSIS cache ready — Tauri will skip download"
-
       - name: Build and package (NSIS)
         shell: pwsh
-        run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+        run: |
+          # GitHub's NSIS binary-releases contains a STUB makensis.exe (~2.5KB).
+          # NSIS.exe is the real console compiler (~91KB).
+          # Strategy: let Tauri download NSIS (fails on stub), replace, retry.
+
+          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+          if (Test-Path $nsisCache) { Remove-Item -Recurse -Force $nsisCache }
+
+          # Attempt 1: let Tauri download NSIS (will fail on stub)
+          Write-Host "=== Attempt 1: trigger NSIS download ==="
+          $ErrorActionPreference = "Continue"
+          ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+          Write-Host "Attempt 1 done"
+
+          # Replace stub makensis.exe with NSIS.exe
+          $makensis = "$nsisCache\makensis.exe"
+          if (Test-Path $makensis) {
+            $size = (Get-Item $makensis).Length
+            Write-Host "makensis.exe size: $size bytes"
+            if ($size -lt 100000) {
+              $nsisExe = "$nsisCache\NSIS.exe"
+              if (Test-Path $nsisExe) {
+                Copy-Item $nsisExe $makensis -Force
+                New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
+                Copy-Item $nsisExe "$nsisCache\Bin\makensis.exe" -Force
+                Write-Host "Replaced stub with NSIS.exe ($((Get-Item $makensis).Length) bytes)"
+              }
+            }
+          }
+
+          # Attempt 2: build with real compiler
+          Write-Host "=== Attempt 2: build with real compiler ==="
+          ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
       - name: Collect artifacts
         shell: pwsh
