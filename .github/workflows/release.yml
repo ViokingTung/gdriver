@@ -166,7 +166,7 @@ jobs:
           if (Test-Path $makensis) {
             $size = (Get-Item $makensis).Length
             Write-Host "makensis.exe size: $size bytes"
-            if ($size -lt 100000) {
+            if ($size -lt 50000) {
               $nsisExe = "$nsisCache\NSIS.exe"
               if (Test-Path $nsisExe) {
                 Copy-Item $nsisExe $makensis -Force

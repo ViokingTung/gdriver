@@ -76,7 +76,7 @@ function Assert-RealNsis {
     if (Test-Path $makensisPath) {
         $size = (Get-Item $makensisPath).Length
         Write-Step "NSIS compiler: $makensisPath ($size bytes)"
-        if ($size -lt 100000) {
+        if ($size -lt 50000) {
             Write-Warn "  makensis.exe is a STUB ($size bytes). Replacing with NSIS.exe..."
             $nsisExe = "$env:LOCALAPPDATA\tauri\NSIS\NSIS.exe"
             if (Test-Path $nsisExe) {
