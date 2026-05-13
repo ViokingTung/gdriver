@@ -194,12 +194,23 @@ jobs:
             Copy-Item $realMakensis.FullName "$nsisCache\makensis.exe" -Force
             New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
             Copy-Item $realMakensis.FullName "$nsisCache\Bin\makensis.exe" -Force
-            # Copy zlib1.dll dependency (makensis.exe needs it)
+            # Copy zlib1.dll dependency
             $zlibSrc = Join-Path $realMakensis.Directory "zlib1.dll"
             if (Test-Path $zlibSrc) {
               Copy-Item $zlibSrc "$nsisCache\zlib1.dll" -Force
               Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
               Write-Host "Copied zlib1.dll"
+            }
+            # makensis.exe looks for Stubs/Include/Plugins in its PARENT directory
+            # (NSISDIR is removed by Tauri). Copy resources to parent.
+            $nsisParent = Split-Path $nsisCache
+            foreach ($dir in @("Stubs", "Include", "Plugins")) {
+              $src = Join-Path $nsisCache $dir
+              $dst = Join-Path $nsisParent $dir
+              if ((Test-Path $src) -and -not (Test-Path $dst)) {
+                Copy-Item $src $dst -Recurse -Force
+                Write-Host "Copied $dir to parent directory"
+              }
             }
             Write-Host "Replaced stub with real compiler"
           } else {
@@ -216,6 +227,14 @@ jobs:
               if (Test-Path $zlibSrc) {
                 Copy-Item $zlibSrc "$nsisCache\zlib1.dll" -Force
                 Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
+              }
+              $nsisParent = Split-Path $nsisCache
+              foreach ($dir in @("Stubs", "Include", "Plugins")) {
+                $src = Join-Path $nsisCache $dir
+                $dst = Join-Path $nsisParent $dir
+                if ((Test-Path $src) -and -not (Test-Path $dst)) {
+                  Copy-Item $src $dst -Recurse -Force
+                }
               }
             } else {
               Write-Host "ERROR: Could not find real NSIS compiler"
