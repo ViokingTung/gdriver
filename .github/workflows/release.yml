@@ -217,6 +217,27 @@ jobs:
           $finalSize = (Get-Item "$nsisCache\makensis.exe").Length
           Write-Host "Final makensis.exe size: $finalSize bytes"
 
+          # Test if the compiler actually runs
+          Write-Host "=== Testing makensis.exe ==="
+          try {
+            $output = & "$nsisCache\makensis.exe" /VERSION 2>&1
+            Write-Host "makensis /VERSION output: $output"
+          } catch {
+            Write-Host "makensis /VERSION failed: $_"
+          }
+
+          # Check DLL dependencies with dumpbin
+          Write-Host "=== Checking DLL dependencies ==="
+          $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vsWhere) {
+            $vsPath = & $vsWhere -latest -property installationPath
+            $dumpbin = Join-Path $vsPath "VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe"
+            $dumpbin = Get-Item $dumpbin | Select-Object -First 1
+            if ($dumpbin) {
+              & $dumpbin.FullName /dependents "$nsisCache\makensis.exe" 2>&1 | Select-Object -First 20
+            }
+          }
+
           # Attempt 2: build with real compiler
           Write-Host "=== Attempt 2: build with real compiler ==="
           ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
