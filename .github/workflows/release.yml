@@ -161,21 +161,61 @@ jobs:
           }
           Write-Host "Attempt 1 done"
 
-          # Replace stub makensis.exe with NSIS.exe
-          $makensis = "$nsisCache\makensis.exe"
-          if (Test-Path $makensis) {
-            $size = (Get-Item $makensis).Length
-            Write-Host "makensis.exe size: $size bytes"
-            if ($size -lt 50000) {
-              $nsisExe = "$nsisCache\NSIS.exe"
-              if (Test-Path $nsisExe) {
-                Copy-Item $nsisExe $makensis -Force
-                New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
-                Copy-Item $nsisExe "$nsisCache\Bin\makensis.exe" -Force
-                Write-Host "Replaced stub with NSIS.exe ($((Get-Item $makensis).Length) bytes)"
-              }
+          # The downloaded NSIS has a stub makensis.exe (2.5KB) and a GUI NSIS.exe.
+          # Neither works as a console compiler. Download the real makensis.exe
+          # from the NSIS installer (which contains the actual compiler).
+          Write-Host "=== Downloading real makensis.exe ==="
+          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+          $nsisInstaller = "$env:TEMP\nsis-3.11-setup.exe"
+          $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11-setup.exe/download"
+          Write-Host "Downloading NSIS installer..."
+          curl.exe -L -o $nsisInstaller $nsisUrl
+          $installerSize = (Get-Item $nsisInstaller).Length
+          Write-Host "Installer size: $installerSize bytes"
+
+          # Extract using 7z (available on GitHub Actions runners)
+          $extractDir = "$env:TEMP\nsis-installer-extract"
+          if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
+          7z x $nsisInstaller -o"$extractDir" -y | Out-Null
+
+          # List all .exe files to find the real compiler
+          Write-Host "=== Extracted executables ==="
+          Get-ChildItem $extractDir -Filter "*.exe" -Recurse |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize
+
+          # Find the real makensis.exe (should be > 100KB)
+          $realMakensis = Get-ChildItem $extractDir -Filter "makensis.exe" -Recurse |
+            Where-Object { $_.Length -gt 100000 } |
+            Select-Object -First 1
+
+          if ($realMakensis) {
+            Write-Host "Found real makensis.exe: $($realMakensis.FullName) ($($realMakensis.Length) bytes)"
+            Copy-Item $realMakensis.FullName "$nsisCache\makensis.exe" -Force
+            New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
+            Copy-Item $realMakensis.FullName "$nsisCache\Bin\makensis.exe" -Force
+            Write-Host "Replaced stub with real compiler"
+          } else {
+            # Try NSIS.exe if makensis.exe not found large enough
+            $realNsis = Get-ChildItem $extractDir -Filter "NSIS.exe" -Recurse |
+              Where-Object { $_.Length -gt 100000 } |
+              Select-Object -First 1
+            if ($realNsis) {
+              Write-Host "Found NSIS.exe: $($realNsis.FullName) ($($realNsis.Length) bytes)"
+              Copy-Item $realNsis.FullName "$nsisCache\makensis.exe" -Force
+              New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
+              Copy-Item $realNsis.FullName "$nsisCache\Bin\makensis.exe" -Force
+            } else {
+              Write-Host "ERROR: Could not find real NSIS compiler"
+              Get-ChildItem $extractDir -Filter "*.exe" -Recurse |
+                ForEach-Object { Write-Host "  $($_.FullName): $($_.Length) bytes" }
+              throw "No real NSIS compiler found"
             }
           }
+
+          # Verify
+          $finalSize = (Get-Item "$nsisCache\makensis.exe").Length
+          Write-Host "Final makensis.exe size: $finalSize bytes"
 
           # Attempt 2: build with real compiler
           Write-Host "=== Attempt 2: build with real compiler ==="
