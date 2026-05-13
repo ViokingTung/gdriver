@@ -118,8 +118,8 @@ function Preprocess-NsisTemplate {
     return $processedPath
 }
 
-# ── Update tauri.conf.json to use processed template ─────────────────────
-function Set-TauriTemplate {
+# ── Update tauri.conf.json for NSIS build ─────────────────────────────────
+function Set-TauriNsisConfig {
     param([string] $TemplatePath)
 
     $tauriConfPath = "$TauriDir\tauri.conf.json"
@@ -130,8 +130,19 @@ function Set-TauriTemplate {
 
     $text = $text -replace '"template"\s*:\s*"[^"]*"', "`"template`": `"$absTemplatePath`""
 
+    # Fix installerIcon path — Tauri's NSIS bundler uses dunce::canonicalize()
+    # which resolves relative to CWD (apps/gdriver-app), not tauri.conf.json dir.
+    # Make it absolute so it works regardless of CWD.
+    $iconPath = "$TauriDir\icons\icon.ico"
+    if (Test-Path $iconPath) {
+        $absIconPath = (Resolve-Path $iconPath).Path -replace '\\', '/'
+        $text = $text -replace '"installerIcon"\s*:\s*"[^"]*"', "`"installerIcon`": `"$absIconPath`""
+        Write-Step "  installerIcon: $absIconPath"
+    }
+
     Set-Content $tauriConfPath $text -NoNewline
-    Write-Step "  Updated tauri.conf.json to use template: $absTemplatePath"
+    Write-Step "  Updated tauri.conf.json for NSIS build"
+    Write-Step "  template: $absTemplatePath"
 }
 
 # ── Build Tauri app ──────────────────────────────────────────────────────
@@ -182,6 +193,7 @@ function Restore-TauriConf {
     $tauriConfPath = "$TauriDir\tauri.conf.json"
     $text = Get-Content $tauriConfPath -Raw
     $text = $text -replace '"template"\s*:\s*"[^"]*"', '"template": "../../../packaging/windows/nsis/installer.nsi"'
+    $text = $text -replace '"installerIcon"\s*:\s*"[^"]*"', '"installerIcon": "icons/icon.ico"'
     Set-Content $tauriConfPath $text -NoNewline
 }
 
@@ -272,7 +284,7 @@ function Main {
     # 3. Preprocess NSIS template
     if ($BuildMode -ne "msi") {
         $processedTemplate = Preprocess-NsisTemplate
-        Set-TauriTemplate -TemplatePath $processedTemplate
+        Set-TauriNsisConfig -TemplatePath $processedTemplate
 
         # Debug: verify template preprocessing
         if (Test-Path $processedTemplate) {
