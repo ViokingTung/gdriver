@@ -185,28 +185,118 @@ function Invoke-TauriBuild {
     }
     Write-Step "  cargo tauri build --bundles $BuildMode"
 
-    # Check NSIS output directory
+    # Check NSIS output directory (Tauri renders installer.nsi here)
     $nsisOutputDir = "$ProjectRoot\target\release\nsis\x64"
     Write-Step "  NSIS output dir: $nsisOutputDir (exists: $(Test-Path $nsisOutputDir))"
 
+    # Run Tauri build showing all output (not filtered — critical for debugging)
+    $tauriExitCode = 0
     cargo tauri build --bundles $BuildMode 2>&1 | ForEach-Object {
         $line = $_.ToString()
-        if ($line -match "nsis|makensis|NSIS|bundle|Error|error|failed|not found|File:") {
+        if ($line -match "nsis|makensis|NSIS|bundle|Error|error|failed|not found|File:|Warn |Info |Verifying|Running|Patching|Downloading|extracting") {
             Write-Step "  TAURI: $line"
         }
     }
+    $tauriExitCode = $LASTEXITCODE
 
-    # If build failed, dump the rendered NSIS script for debugging
-    if ($LASTEXITCODE -ne 0) {
+    # If Tauri build failed, try manual NSIS compilation as fallback.
+    # Tauri v2 downloads a stub makensis.exe (~2.5KB) that cannot compile.
+    # Even when replaced with the real compiler, Command::new() may fail
+    # with os error 2 on GitHub Actions runners (MSVCP60.dll context issue).
+    # We work around this by running makensis.exe directly.
+    if ($tauriExitCode -ne 0) {
         $renderedScript = "$nsisOutputDir\installer.nsi"
         if (Test-Path $renderedScript) {
             Write-Step "  Rendered NSIS script exists. First 30 lines:"
             Get-Content $renderedScript -TotalCount 30 | ForEach-Object { Write-Step "    $_" }
+
+            Write-Step "  Attempting manual NSIS compilation (Tauri bundler failed with exit code $tauriExitCode)..."
+
+            # Find a working makensis.exe
+            $makensisExe = $null
+            $candidatePaths = @(
+                "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe",
+                "$env:LOCALAPPDATA\tauri\NSIS\Bin\makensis.exe",
+                "$env:ProgramFiles\NSIS\makensis.exe",
+                "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+                "$env:ProgramFiles\NSIS\Bin\makensis.exe",
+                "${env:ProgramFiles(x86)}\NSIS\Bin\makensis.exe"
+            )
+            foreach ($p in $candidatePaths) {
+                if (Test-Path $p) {
+                    $sz = (Get-Item $p).Length
+                    if ($sz -gt 50000) {
+                        $makensisExe = $p
+                        Write-Step "  Using makensis.exe: $p ($sz bytes)"
+                        break
+                    }
+                }
+            }
+
+            if (-not $makensisExe) {
+                # Last resort: try PATH
+                $which = Get-Command makensis.exe -ErrorAction SilentlyContinue
+                if ($which) {
+                    $makensisExe = $which.Source
+                    Write-Step "  Using makensis.exe from PATH: $makensisExe"
+                }
+            }
+
+            if ($makensisExe) {
+                # Run makensis the same way Tauri v2 does:
+                #   -INPUTCHARSET UTF8 -OUTPUTCHARSET UTF8 -V3 <script>
+                #   NSISDIR / NSISCONFDIR removed → makensis finds resources
+                #   relative to its own executable directory (NSISDIR).
+                #   current_dir set to bundle output directory.
+                $bundleNsisDir = "$TargetDir\bundle\nsis"
+                New-Item -ItemType Directory -Force -Path $bundleNsisDir | Out-Null
+
+                Write-Step "  Running: $makensisExe -INPUTCHARSET UTF8 -OUTPUTCHARSET UTF8 -V3 `"$renderedScript`""
+                $prevErrorAction = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+
+                # Match Tauri v2: remove NSISDIR / NSISCONFDIR so makensis
+                # determines resource paths from its own executable location.
+                $oldNsisDir = $env:NSISDIR
+                $oldNsisConfDir = $env:NSISCONFDIR
+                Remove-Item Env:NSISDIR -ErrorAction SilentlyContinue
+                Remove-Item Env:NSISCONFDIR -ErrorAction SilentlyContinue
+
+                $nsisOutput = & $makensisExe -INPUTCHARSET UTF8 -OUTPUTCHARSET UTF8 -V3 $renderedScript 2>&1
+                $nsisExitCode = $LASTEXITCODE
+
+                # Restore env vars
+                if ($oldNsisDir) { $env:NSISDIR = $oldNsisDir }
+                if ($oldNsisConfDir) { $env:NSISCONFDIR = $oldNsisConfDir }
+
+                $ErrorActionPreference = $prevErrorAction
+
+                # Show NSIS output for diagnostics
+                $nsisOutput | ForEach-Object {
+                    $nsisLine = $_.ToString()
+                    if ($nsisLine.Trim()) {
+                        Write-Step "  NSIS: $nsisLine"
+                    }
+                }
+
+                if ($nsisExitCode -eq 0) {
+                    Write-Step "  Manual NSIS compilation succeeded."
+                    $tauriExitCode = 0  # mark as success
+                } else {
+                    Write-Err "  Manual NSIS compilation failed (exit code $nsisExitCode)."
+                }
+            } else {
+                Write-Err "  No working makensis.exe found. Cannot compile installer."
+            }
         } else {
             Write-Step "  Rendered NSIS script NOT found at: $renderedScript"
+            Write-Step "  Checking for rendered script in alternative locations..."
+            Get-ChildItem "$ProjectRoot\target\release\nsis" -Recurse -Filter "installer.nsi" -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Step "    $($_.FullName)" }
         }
     }
-    if ($LASTEXITCODE -ne 0) {
+
+    if ($tauriExitCode -ne 0) {
         Pop-Location
         throw "Tauri build failed with exit code $LASTEXITCODE"
     }

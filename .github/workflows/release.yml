@@ -142,161 +142,73 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
+      - name: Setup NSIS compiler
+        shell: pwsh
+        run: |
+          # Tauri v2 downloads a stub makensis.exe (~2.5KB) from GitHub that
+          # cannot compile installers. We pre-populate the Tauri NSIS cache
+          # with the real NSIS compiler so Tauri doesn't need to download.
+          # build.ps1 also has a manual-compilation fallback as a safety net.
+
+          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+
+          # Create directories
+          New-Item -ItemType Directory -Force -Path $nsisCache | Out-Null
+          New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
+
+          # Download real NSIS 3.11 from SourceForge and extract with 7z
+          Write-Host "=== Downloading NSIS 3.11 installer ==="
+          $nsisInstaller = "$env:TEMP\nsis-3.11-setup.exe"
+          $extractDir = "$env:TEMP\nsis-installer-extract"
+          if (-not (Test-Path $extractDir)) {
+            curl.exe -L -o $nsisInstaller "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11-setup.exe/download"
+            Write-Host "Installer size: $((Get-Item $nsisInstaller).Length) bytes"
+            Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+            7z x $nsisInstaller -o"$extractDir" -y | Out-Null
+          }
+
+          # Copy ALL NSIS files to the Tauri cache directory
+          Write-Host "=== Populating NSIS cache ==="
+          Copy-Item "$extractDir\*" $nsisCache -Recurse -Force
+          Write-Host "Copied NSIS files to cache"
+
+          # Download nsis_tauri_utils.dll AFTER copying NSIS files
+          # (must be after so it's not overwritten by the NSIS extraction's Plugins dir)
+          $tauriUtilsUrl = "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
+          $tauriUtilsDir = "$nsisCache\Plugins\x86-unicode\additional"
+          New-Item -ItemType Directory -Force -Path $tauriUtilsDir | Out-Null
+          $tauriUtilsDll = "$tauriUtilsDir\nsis_tauri_utils.dll"
+          Write-Host "Downloading nsis_tauri_utils.dll..."
+          curl.exe -L -o $tauriUtilsDll $tauriUtilsUrl
+          Write-Host "  size: $((Get-Item $tauriUtilsDll).Length) bytes"
+
+          # Replace stub root makensis.exe with real Bin\makensis.exe
+          $realCompiler = "$nsisCache\Bin\makensis.exe"
+          if ((Test-Path $realCompiler) -and ((Get-Item $realCompiler).Length -gt 100000)) {
+            Copy-Item $realCompiler "$nsisCache\makensis.exe" -Force
+            Write-Host "Replaced stub makensis.exe with real compiler ($((Get-Item $realCompiler).Length) bytes)"
+          } else {
+            Write-Host "WARNING: Real makensis.exe not found at $realCompiler"
+          }
+
+          # Copy zlib1.dll alongside makensis.exe (DLL dependency)
+          $zlibSrc = "$nsisCache\Bin\zlib1.dll"
+          if (-not (Test-Path $zlibSrc)) {
+            $zlibSrc = "$extractDir\Bin\zlib1.dll"
+          }
+          if (Test-Path $zlibSrc) {
+            Copy-Item $zlibSrc "$nsisCache\zlib1.dll" -Force
+            Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
+          }
+
+          # Test the compiler
+          Write-Host "=== Testing makensis.exe ==="
+          $version = & "$nsisCache\makensis.exe" /VERSION 2>&1
+          Write-Host "makensis /VERSION: $version"
+
       - name: Build and package (NSIS)
         shell: pwsh
         run: |
-          # GitHub's NSIS binary-releases contains a STUB makensis.exe (~2.5KB).
-          # NSIS.exe is the real console compiler (~91KB).
-          # Strategy: let Tauri download NSIS (fails on stub), replace, retry.
-
-          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-          if (Test-Path $nsisCache) { Remove-Item -Recurse -Force $nsisCache }
-
-          # Attempt 1: let Tauri download NSIS (will fail on stub)
-          Write-Host "=== Attempt 1: trigger NSIS download ==="
-          try {
-            ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
-          } catch {
-            Write-Host "Attempt 1 failed (expected): $_"
-          }
-          Write-Host "Attempt 1 done"
-
-          # The downloaded NSIS has a stub makensis.exe (2.5KB) and a GUI NSIS.exe.
-          # Neither works as a console compiler. Download the real makensis.exe
-          # from the NSIS installer (which contains the actual compiler).
-          Write-Host "=== Downloading real makensis.exe ==="
-          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-          $nsisInstaller = "$env:TEMP\nsis-3.11-setup.exe"
-          $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11-setup.exe/download"
-          Write-Host "Downloading NSIS installer..."
-          curl.exe -L -o $nsisInstaller $nsisUrl
-          $installerSize = (Get-Item $nsisInstaller).Length
-          Write-Host "Installer size: $installerSize bytes"
-
-          # Extract using 7z (available on GitHub Actions runners)
-          $extractDir = "$env:TEMP\nsis-installer-extract"
-          if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
-          7z x $nsisInstaller -o"$extractDir" -y | Out-Null
-
-          # List all .exe files to find the real compiler
-          Write-Host "=== Extracted executables ==="
-          Get-ChildItem $extractDir -Filter "*.exe" -Recurse |
-            Select-Object FullName, Length |
-            Format-Table -AutoSize
-
-          # Find the real makensis.exe (should be > 100KB)
-          $realMakensis = Get-ChildItem $extractDir -Filter "makensis.exe" -Recurse |
-            Where-Object { $_.Length -gt 100000 } |
-            Select-Object -First 1
-
-          if ($realMakensis) {
-            Write-Host "Found real makensis.exe: $($realMakensis.FullName) ($($realMakensis.Length) bytes)"
-            Copy-Item $realMakensis.FullName "$nsisCache\makensis.exe" -Force
-            New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
-            Copy-Item $realMakensis.FullName "$nsisCache\Bin\makensis.exe" -Force
-            # Copy zlib1.dll dependency
-            $zlibSrc = Join-Path $realMakensis.Directory "zlib1.dll"
-            if (Test-Path $zlibSrc) {
-              Copy-Item $zlibSrc "$nsisCache\zlib1.dll" -Force
-              Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
-              Write-Host "Copied zlib1.dll"
-            }
-            # makensis.exe looks for Stubs/Include/Plugins/Contrib in its
-            # PARENT directory (NSISDIR is removed by Tauri). Copy resources
-            # from $nsisCache to parent. Also copy from installer extract
-            # to ensure complete Stubs (Tauri's download may be incomplete).
-            $nsisParent = Split-Path $nsisCache
-            foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
-              $dst = Join-Path $nsisParent $dir
-              # First copy from extracted installer (complete set)
-              $extractSrc = Join-Path $extractDir $dir
-              if (Test-Path $extractSrc) {
-                Copy-Item $extractSrc $dst -Recurse -Force
-                Write-Host "Copied $dir from installer to parent"
-              }
-              # Then overlay from Tauri's download (has tauri-specific files)
-              $cacheSrc = Join-Path $nsisCache $dir
-              if (Test-Path $cacheSrc) {
-                Copy-Item $cacheSrc $dst -Recurse -Force
-                Write-Host "Copied $dir from cache to parent"
-              }
-            }
-            Write-Host "Replaced stub with real compiler"
-          } else {
-            # Try NSIS.exe if makensis.exe not found large enough
-            $realNsis = Get-ChildItem $extractDir -Filter "NSIS.exe" -Recurse |
-              Where-Object { $_.Length -gt 100000 } |
-              Select-Object -First 1
-            if ($realNsis) {
-              Write-Host "Found NSIS.exe: $($realNsis.FullName) ($($realNsis.Length) bytes)"
-              Copy-Item $realNsis.FullName "$nsisCache\makensis.exe" -Force
-              New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
-              Copy-Item $realNsis.FullName "$nsisCache\Bin\makensis.exe" -Force
-              $zlibSrc = Join-Path $realNsis.Directory "zlib1.dll"
-              if (Test-Path $zlibSrc) {
-                Copy-Item $zlibSrc "$nsisCache\zlib1.dll" -Force
-                Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
-              }
-              # Same copy-to-parent logic for NSIS.exe fallback
-              $nsisParent = Split-Path $nsisCache
-              foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
-                $dst = Join-Path $nsisParent $dir
-                $extractSrc = Join-Path $extractDir $dir
-                if (Test-Path $extractSrc) {
-                  Copy-Item $extractSrc $dst -Recurse -Force
-                }
-                $cacheSrc = Join-Path $nsisCache $dir
-                if (Test-Path $cacheSrc) {
-                  Copy-Item $cacheSrc $dst -Recurse -Force
-                }
-              }
-            } else {
-              Write-Host "ERROR: Could not find real NSIS compiler"
-              Get-ChildItem $extractDir -Filter "*.exe" -Recurse |
-                ForEach-Object { Write-Host "  $($_.FullName): $($_.Length) bytes" }
-              throw "No real NSIS compiler found"
-            }
-          }
-
-          # Verify
-          $finalSize = (Get-Item "$nsisCache\makensis.exe").Length
-          Write-Host "Final makensis.exe size: $finalSize bytes"
-
-          # Diagnose: list what's in the parent directory
-          $nsisParent = Split-Path $nsisCache
-          Write-Host "=== NSIS cache ($nsisCache) ==="
-          Get-ChildItem $nsisCache -ErrorAction SilentlyContinue |
-            ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
-          Write-Host "=== NSIS parent ($nsisParent) ==="
-          Get-ChildItem $nsisParent -ErrorAction SilentlyContinue |
-            ForEach-Object { Write-Host "  $($_.Name)" }
-          Write-Host "=== Stubs in parent ==="
-          Get-ChildItem "$nsisParent\Stubs" -ErrorAction SilentlyContinue |
-            ForEach-Object { Write-Host "  $($_.Name)" }
-
-          # Test if the compiler actually runs
-          Write-Host "=== Testing makensis.exe ==="
-          try {
-            $output = & "$nsisCache\makensis.exe" /VERSION 2>&1
-            Write-Host "makensis /VERSION output: $output"
-          } catch {
-            Write-Host "makensis /VERSION failed: $_"
-          }
-
-          # Check DLL dependencies with dumpbin
-          Write-Host "=== Checking DLL dependencies ==="
-          $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (Test-Path $vsWhere) {
-            $vsPath = & $vsWhere -latest -property installationPath
-            $dumpbin = Join-Path $vsPath "VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe"
-            $dumpbin = Get-Item $dumpbin | Select-Object -First 1
-            if ($dumpbin) {
-              & $dumpbin.FullName /dependents "$nsisCache\makensis.exe" 2>&1 | Select-Object -First 20
-            }
-          }
-
-          # Attempt 2: build with real compiler
-          Write-Host "=== Attempt 2: build with real compiler ==="
           ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
           if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
