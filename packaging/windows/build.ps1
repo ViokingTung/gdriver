@@ -71,21 +71,43 @@ function Assert-RealNsis {
     # Tauri caches NSIS at %LOCALAPPDATA%\tauri\NSIS.
     # GitHub binary-releases and SourceForge both ship a STUB makensis.exe (~2.5KB)
     # that cannot compile. The real console compiler is NSIS.exe.
-    $makensisPath = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
+    $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+    $nsisParent = "$env:LOCALAPPDATA\tauri"
+    $makensisPath = "$nsisCache\makensis.exe"
 
     if (Test-Path $makensisPath) {
         $size = (Get-Item $makensisPath).Length
         Write-Step "NSIS compiler: $makensisPath ($size bytes)"
         if ($size -lt 50000) {
-            Write-Warn "  makensis.exe is a STUB ($size bytes). Replacing with NSIS.exe..."
-            $nsisExe = "$env:LOCALAPPDATA\tauri\NSIS\NSIS.exe"
-            if (Test-Path $nsisExe) {
-                $nsisSize = (Get-Item $nsisExe).Length
-                Copy-Item $nsisExe $makensisPath -Force
-                Copy-Item $nsisExe "$env:LOCALAPPDATA\tauri\NSIS\Bin\makensis.exe" -Force
-                Write-Step "  Replaced stub with NSIS.exe ($nsisSize bytes)"
+            Write-Warn "  makensis.exe is a STUB ($size bytes). Replacing with Bin\makensis.exe..."
+            $realCompiler = "$nsisCache\Bin\makensis.exe"
+            if ((Test-Path $realCompiler) -and ((Get-Item $realCompiler).Length -gt 50000)) {
+                Copy-Item $realCompiler $makensisPath -Force
+                Copy-Item $realCompiler "$nsisCache\Bin\makensis.exe" -Force
+                Write-Step "  Replaced stub with Bin\makensis.exe ($((Get-Item $realCompiler).Length) bytes)"
             } else {
-                Write-Err "  NSIS.exe not found! Cannot fix stub compiler."
+                Write-Warn "  No real compiler found in Bin\. Trying NSIS.exe..."
+                $nsisExe = "$nsisCache\NSIS.exe"
+                if (Test-Path $nsisExe) {
+                    $nsisSize = (Get-Item $nsisExe).Length
+                    Copy-Item $nsisExe $makensisPath -Force
+                    Copy-Item $nsisExe "$nsisCache\Bin\makensis.exe" -Force
+                    Write-Step "  Replaced stub with NSIS.exe ($nsisSize bytes)"
+                } else {
+                    Write-Err "  NSIS.exe not found! Cannot fix stub compiler."
+                }
+            }
+        }
+
+        # Ensure NSIS resources exist in PARENT directory (makensis.exe resolves
+        # Stubs/Include/Plugins/Contrib relative to its own dir, which for the
+        # real Bin\makensis.exe means going UP one level to %LOCALAPPDATA%\tauri\)
+        foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
+            $srcDir = "$nsisCache\$dir"
+            $dstDir = "$nsisParent\$dir"
+            if ((Test-Path $srcDir) -and -not (Test-Path $dstDir)) {
+                Copy-Item $srcDir $dstDir -Recurse -Force
+                Write-Step "  Copied $dir to parent: $dstDir"
             }
         }
     } else {

@@ -204,6 +204,32 @@ jobs:
             Copy-Item $zlibInExtract "$nsisCache\Bin\zlib1.dll" -Force
           }
 
+          # Copy NSIS resources to PARENT directory (%LOCALAPPDATA%\tauri\).
+          # When Tauri removes NSISDIR env var, the real Bin\makensis.exe
+          # (copied to root) resolves Stubs/Include/Plugins/Contrib relative
+          # to its own directory. The Bin\makensis.exe binary goes UP one
+          # level (to the parent), so resources must exist in both locations.
+          $nsisParent = "$env:LOCALAPPDATA\tauri"
+          Write-Host "=== Copying NSIS resources to parent: $nsisParent ==="
+          foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
+            $src = "$extractDir\$dir"
+            $dst = "$nsisParent\$dir"
+            if (Test-Path $src) {
+              Copy-Item $src $dst -Recurse -Force
+              Write-Host "  Copied $dir to $dst"
+            } else {
+              Write-Host "  WARNING: $src not found in extract"
+            }
+          }
+
+          # Copy nsis_tauri_utils.dll to parent Plugins as well
+          if (Test-Path $tauriUtilsDll) {
+            $parentUtilsDir = "$nsisParent\Plugins\x86-unicode\additional"
+            New-Item -ItemType Directory -Force -Path $parentUtilsDir | Out-Null
+            Copy-Item $tauriUtilsDll "$parentUtilsDir\nsis_tauri_utils.dll" -Force
+            Write-Host "  Copied nsis_tauri_utils.dll to parent Plugins"
+          }
+
           # Test the compiler
           Write-Host "=== Testing makensis.exe ==="
           $version = & "$nsisCache\makensis.exe" /VERSION 2>&1
