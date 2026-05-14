@@ -184,10 +184,26 @@ function Invoke-TauriBuild {
         Write-Err "  daemon MISSING before cargo tauri build!"
     }
     Write-Step "  cargo tauri build --bundles $BuildMode"
+
+    # Check NSIS output directory
+    $nsisOutputDir = "$ProjectRoot\target\release\nsis\x64"
+    Write-Step "  NSIS output dir: $nsisOutputDir (exists: $(Test-Path $nsisOutputDir))"
+
     cargo tauri build --bundles $BuildMode 2>&1 | ForEach-Object {
         $line = $_.ToString()
         if ($line -match "nsis|makensis|NSIS|bundle|Error|error|failed|not found|File:") {
             Write-Step "  TAURI: $line"
+        }
+    }
+
+    # If build failed, dump the rendered NSIS script for debugging
+    if ($LASTEXITCODE -ne 0) {
+        $renderedScript = "$nsisOutputDir\installer.nsi"
+        if (Test-Path $renderedScript) {
+            Write-Step "  Rendered NSIS script exists. First 30 lines:"
+            Get-Content $renderedScript -TotalCount 30 | ForEach-Object { Write-Step "    $_" }
+        } else {
+            Write-Step "  Rendered NSIS script NOT found at: $renderedScript"
         }
     }
     if ($LASTEXITCODE -ne 0) {
