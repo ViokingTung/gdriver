@@ -91,10 +91,15 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd dist/linux
+          shopt -s nullglob
           for f in *; do
             [ -f "$f" ] && sha256sum "$f" >> SHA256SUMS
           done
-          cat SHA256SUMS
+          if [ -f SHA256SUMS ]; then
+            cat SHA256SUMS
+          else
+            echo "No artifacts to checksum"
+          fi
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v6
@@ -142,28 +147,104 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Install NSIS
+      - name: Setup NSIS compiler
         shell: pwsh
         run: |
-          choco install nsis -y
-          $nsisDir = "C:\Program Files (x86)\NSIS"
-          & "$nsisDir\makensis.exe" /VERSION
-          if (-not (Test-Path "$nsisDir\makensis.exe")) {
-            throw "makensis.exe not found at $nsisDir"
+          # Tauri v2 downloads a stub makensis.exe (~2.5KB) from GitHub that
+          # cannot compile installers. We pre-populate the Tauri NSIS cache
+          # with the real NSIS compiler so Tauri doesn't need to download.
+          # build.ps1 also has a manual-compilation fallback as a safety net.
+
+          $nsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
+
+          # Create directories
+          New-Item -ItemType Directory -Force -Path $nsisCache | Out-Null
+          New-Item -ItemType Directory -Force -Path "$nsisCache\Bin" | Out-Null
+
+          # Download real NSIS 3.11 from SourceForge and extract with 7z
+          Write-Host "=== Downloading NSIS 3.11 installer ==="
+          $nsisInstaller = "$env:TEMP\nsis-3.11-setup.exe"
+          $extractDir = "$env:TEMP\nsis-installer-extract"
+          if (-not (Test-Path $extractDir)) {
+            curl.exe -L -o $nsisInstaller "https://sourceforge.net/projects/nsis/files/NSIS%203/3.11/nsis-3.11-setup.exe/download"
+            Write-Host "Installer size: $((Get-Item $nsisInstaller).Length) bytes"
+            Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+            7z x $nsisInstaller -o"$extractDir" -y | Out-Null
           }
-          # Set NSIS_DIR so Tauri bundler can find NSIS directly
-          echo "NSIS_DIR=$nsisDir" >> $env:GITHUB_ENV
-          Write-Host "NSIS_DIR set to: $nsisDir"
-          # Also pre-populate Tauri's NSIS cache directory
-          $tauriNsisCache = "$env:LOCALAPPDATA\tauri\NSIS"
-          New-Item -ItemType Directory -Force -Path $tauriNsisCache
-          Copy-Item -Path "$nsisDir\*" -Destination $tauriNsisCache -Recurse -Force
-          Write-Host "Tauri NSIS cache populated at: $tauriNsisCache"
-          Get-ChildItem $tauriNsisCache | Select-Object Name
+
+          # Copy ALL NSIS files to the Tauri cache directory
+          Write-Host "=== Populating NSIS cache ==="
+          Copy-Item "$extractDir\*" $nsisCache -Recurse -Force
+          Write-Host "Copied NSIS files to cache"
+
+          # Download nsis_tauri_utils.dll AFTER copying NSIS files
+          # (must be after so it's not overwritten by the NSIS extraction's Plugins dir)
+          $tauriUtilsUrl = "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll"
+          $tauriUtilsDir = "$nsisCache\Plugins\x86-unicode\additional"
+          New-Item -ItemType Directory -Force -Path $tauriUtilsDir | Out-Null
+          $tauriUtilsDll = "$tauriUtilsDir\nsis_tauri_utils.dll"
+          Write-Host "Downloading nsis_tauri_utils.dll..."
+          curl.exe -L -o $tauriUtilsDll $tauriUtilsUrl
+          Write-Host "  size: $((Get-Item $tauriUtilsDll).Length) bytes"
+
+          # Replace stub root makensis.exe with real Bin\makensis.exe
+          $realCompiler = "$nsisCache\Bin\makensis.exe"
+          if ((Test-Path $realCompiler) -and ((Get-Item $realCompiler).Length -gt 100000)) {
+            Copy-Item $realCompiler "$nsisCache\makensis.exe" -Force
+            Write-Host "Replaced stub makensis.exe with real compiler ($((Get-Item $realCompiler).Length) bytes)"
+          } else {
+            Write-Host "WARNING: Real makensis.exe not found at $realCompiler"
+          }
+
+          # Copy zlib1.dll alongside makensis.exe (DLL dependency)
+          $zlibInCache = "$nsisCache\Bin\zlib1.dll"
+          $zlibInExtract = "$extractDir\Bin\zlib1.dll"
+          if (Test-Path $zlibInCache) {
+            # Already in Bin from extraction copy; just ensure root copy exists
+            if (-not (Test-Path "$nsisCache\zlib1.dll")) {
+              Copy-Item $zlibInCache "$nsisCache\zlib1.dll" -Force
+            }
+          } elseif (Test-Path $zlibInExtract) {
+            Copy-Item $zlibInExtract "$nsisCache\zlib1.dll" -Force
+            Copy-Item $zlibInExtract "$nsisCache\Bin\zlib1.dll" -Force
+          }
+
+          # Copy NSIS resources to PARENT directory (%LOCALAPPDATA%\tauri\).
+          # When Tauri removes NSISDIR env var, the real Bin\makensis.exe
+          # (copied to root) resolves Stubs/Include/Plugins/Contrib relative
+          # to its own directory. The Bin\makensis.exe binary goes UP one
+          # level (to the parent), so resources must exist in both locations.
+          $nsisParent = "$env:LOCALAPPDATA\tauri"
+          Write-Host "=== Copying NSIS resources to parent: $nsisParent ==="
+          foreach ($dir in @("Stubs", "Include", "Plugins", "Contrib")) {
+            $src = "$extractDir\$dir"
+            $dst = "$nsisParent\$dir"
+            if (Test-Path $src) {
+              Copy-Item $src $dst -Recurse -Force
+              Write-Host "  Copied $dir to $dst"
+            } else {
+              Write-Host "  WARNING: $src not found in extract"
+            }
+          }
+
+          # Copy nsis_tauri_utils.dll to parent Plugins as well
+          if (Test-Path $tauriUtilsDll) {
+            $parentUtilsDir = "$nsisParent\Plugins\x86-unicode\additional"
+            New-Item -ItemType Directory -Force -Path $parentUtilsDir | Out-Null
+            Copy-Item $tauriUtilsDll "$parentUtilsDir\nsis_tauri_utils.dll" -Force
+            Write-Host "  Copied nsis_tauri_utils.dll to parent Plugins"
+          }
+
+          # Test the compiler
+          Write-Host "=== Testing makensis.exe ==="
+          $version = & "$nsisCache\makensis.exe" /VERSION 2>&1
+          Write-Host "makensis /VERSION: $version"
 
       - name: Build and package (NSIS)
         shell: pwsh
-        run: ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+        run: |
+          ./packaging/windows/build.ps1 -SkipSign -BuildMode nsis
+          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
       - name: Collect artifacts
         shell: pwsh
@@ -178,11 +259,16 @@ jobs:
         shell: pwsh
         run: |
           cd dist/windows
-          Get-ChildItem * | ForEach-Object {
-            $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash
-            "$hash  $($_.Name)" | Out-File -Append SHA256SUMS.txt
+          $files = Get-ChildItem -File -ErrorAction SilentlyContinue
+          if ($files) {
+            $files | ForEach-Object {
+              $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash
+              "$hash  $($_.Name)" | Out-File -Append SHA256SUMS.txt
+            }
+            Get-Content SHA256SUMS.txt
+          } else {
+            Write-Host "No artifacts to checksum"
           }
-          Get-Content SHA256SUMS.txt
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v6
@@ -274,10 +360,15 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd dist/macos
+          shopt -s nullglob
           for f in *; do
             [ -f "$f" ] && shasum -a 256 "$f" >> SHA256SUMS
           done
-          cat SHA256SUMS
+          if [ -f SHA256SUMS ]; then
+            cat SHA256SUMS
+          else
+            echo "No artifacts to checksum"
+          fi
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v6
@@ -296,6 +387,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+
       - name: Download all artifacts
         uses: actions/download-artifact@v6
         with:
@@ -320,13 +413,33 @@ jobs:
           sort -u SHA256SUMS -o SHA256SUMS
           cat SHA256SUMS
 
-      - name: Get version from tag
+      - name: Determine version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Create tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists"
+          else
+            git tag "$VERSION"
+            git push origin "$VERSION"
+            echo "Created and pushed tag $VERSION"
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.version }}
           name: "gDriver ${{ steps.version.outputs.version }}"
           body: |
             ## gDriver ${{ steps.version.outputs.version }}
