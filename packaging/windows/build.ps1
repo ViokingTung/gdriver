@@ -324,6 +324,20 @@ function Invoke-TauriBuild {
                 if ($nsisExitCode -eq 0) {
                     Write-Step "  Manual NSIS compilation succeeded."
                     $tauriExitCode = 0  # mark as success
+
+                    # Copy generated installer to the bundle output directory
+                    # (Tauri renders OutFile to nsis\x64\ but artifact collection
+                    # expects it in bundle\nsis\. Tauri normally does this copy,
+                    # but since we bypassed Tauri's bundler, we do it ourselves.)
+                    $generatedExe = Get-ChildItem "$nsisOutputDir\*.exe" -ErrorAction SilentlyContinue |
+                        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                    if ($generatedExe) {
+                        $bundleDest = "$bundleNsisDir\$($generatedExe.Name)"
+                        Copy-Item $generatedExe.FullName $bundleDest -Force
+                        Write-Step "  Copied to bundle output: $bundleDest ($((Get-Item $bundleDest).Length) bytes)"
+                    } else {
+                        Write-Err "  No .exe found in $nsisOutputDir after successful NSIS compilation"
+                    }
                 } else {
                     Write-Err "  Manual NSIS compilation failed (exit code $nsisExitCode)."
                 }
