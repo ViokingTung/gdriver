@@ -91,10 +91,15 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd dist/linux
+          shopt -s nullglob
           for f in *; do
             [ -f "$f" ] && sha256sum "$f" >> SHA256SUMS
           done
-          cat SHA256SUMS
+          if [ -f SHA256SUMS ]; then
+            cat SHA256SUMS
+          else
+            echo "No artifacts to checksum"
+          fi
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v6
@@ -254,11 +259,16 @@ jobs:
         shell: pwsh
         run: |
           cd dist/windows
-          Get-ChildItem * | ForEach-Object {
-            $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash
-            "$hash  $($_.Name)" | Out-File -Append SHA256SUMS.txt
+          $files = Get-ChildItem -File -ErrorAction SilentlyContinue
+          if ($files) {
+            $files | ForEach-Object {
+              $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash
+              "$hash  $($_.Name)" | Out-File -Append SHA256SUMS.txt
+            }
+            Get-Content SHA256SUMS.txt
+          } else {
+            Write-Host "No artifacts to checksum"
           }
-          Get-Content SHA256SUMS.txt
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v6
@@ -350,10 +360,15 @@ jobs:
       - name: Generate SHA-256 checksums
         run: |
           cd dist/macos
+          shopt -s nullglob
           for f in *; do
             [ -f "$f" ] && shasum -a 256 "$f" >> SHA256SUMS
           done
-          cat SHA256SUMS
+          if [ -f SHA256SUMS ]; then
+            cat SHA256SUMS
+          else
+            echo "No artifacts to checksum"
+          fi
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v6
