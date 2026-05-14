@@ -192,13 +192,16 @@ jobs:
           }
 
           # Copy zlib1.dll alongside makensis.exe (DLL dependency)
-          $zlibSrc = "$nsisCache\Bin\zlib1.dll"
-          if (-not (Test-Path $zlibSrc)) {
-            $zlibSrc = "$extractDir\Bin\zlib1.dll"
-          }
-          if (Test-Path $zlibSrc) {
-            Copy-Item $zlibSrc "$nsisCache\zlib1.dll" -Force
-            Copy-Item $zlibSrc "$nsisCache\Bin\zlib1.dll" -Force
+          $zlibInCache = "$nsisCache\Bin\zlib1.dll"
+          $zlibInExtract = "$extractDir\Bin\zlib1.dll"
+          if (Test-Path $zlibInCache) {
+            # Already in Bin from extraction copy; just ensure root copy exists
+            if (-not (Test-Path "$nsisCache\zlib1.dll")) {
+              Copy-Item $zlibInCache "$nsisCache\zlib1.dll" -Force
+            }
+          } elseif (Test-Path $zlibInExtract) {
+            Copy-Item $zlibInExtract "$nsisCache\zlib1.dll" -Force
+            Copy-Item $zlibInExtract "$nsisCache\Bin\zlib1.dll" -Force
           }
 
           # Test the compiler
