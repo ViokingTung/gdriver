@@ -100,12 +100,20 @@ function Preprocess-NsisTemplate {
 
     $templateContent = Get-Content $NsisTemplate -Raw
 
-    # Use backslashes with NSIS escaping ($\\ = literal \ in NSIS)
-    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path -replace '\\', '\\\\'
-    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path -replace '\\', '\\\\'
+    # NSIS needs \\ for a literal backslash. Use .Replace() for literal replacement.
+    $daemonAbsPath = (Resolve-Path "$TargetDir\gdriver-daemon.exe").Path.Replace('\', '\\')
+    $shellAbsPath  = (Resolve-Path "$TargetDir\gdriver_shell.dll").Path.Replace('\', '\\')
 
     Write-Step "  Daemon path: $daemonAbsPath"
     Write-Step "  Shell DLL path: $shellAbsPath"
+
+    # Verify files exist before preprocessing
+    $daemonFile = "$TargetDir\gdriver-daemon.exe"
+    $shellFile = "$TargetDir\gdriver_shell.dll"
+    if (-not (Test-Path $daemonFile)) { throw "Daemon binary not found: $daemonFile" }
+    if (-not (Test-Path $shellFile)) { throw "Shell DLL not found: $shellFile" }
+    Write-Step "  Daemon exists: $((Get-Item $daemonFile).Length) bytes"
+    Write-Step "  Shell DLL exists: $((Get-Item $shellFile).Length) bytes"
 
     $templateContent = $templateContent -replace '__DAEMON_BINARY__', $daemonAbsPath
     $templateContent = $templateContent -replace '__SHELL_DLL__', $shellAbsPath
