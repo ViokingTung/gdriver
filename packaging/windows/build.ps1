@@ -211,22 +211,42 @@ function Invoke-TauriBuild {
     $nsisOutputDir = "$ProjectRoot\target\release\nsis\x64"
     Write-Step "  NSIS output dir: $nsisOutputDir (exists: $(Test-Path $nsisOutputDir))"
 
-    # Run Tauri build showing all output (not filtered — critical for debugging)
+    # Run Tauri build. Use a temporary script to reliably capture the exit code
+    # from cargo (PowerShell piping through ForEach-Object can lose $LASTEXITCODE
+    # on some PowerShell versions, causing false success).
+    $tauriLog = "$env:TEMP\tauri-build.log"
     $tauriExitCode = 0
-    cargo tauri build --bundles $BuildMode 2>&1 | ForEach-Object {
-        $line = $_.ToString()
-        if ($line -match "nsis|makensis|NSIS|bundle|Error|error|failed|not found|File:|Warn |Info |Verifying|Running|Patching|Downloading|extracting") {
-            Write-Step "  TAURI: $line"
+    cmd /c "cargo tauri build --bundles $BuildMode > `"$tauriLog`" 2>&1"
+    $tauriExitCode = $LASTEXITCODE
+    Write-Step "  Tauri build exit code: $tauriExitCode"
+
+    # Show filtered log
+    if (Test-Path $tauriLog) {
+        Get-Content $tauriLog | ForEach-Object {
+            $line = $_
+            if ($line -match "nsis|makensis|NSIS|bundle|Error|error|failed|not found|File:|Warn |Info |Verifying|Running|Patching|Downloading|extracting") {
+                Write-Step "  TAURI: $line"
+            }
         }
     }
-    $tauriExitCode = $LASTEXITCODE
 
-    # If Tauri build failed, try manual NSIS compilation as fallback.
-    # Tauri v2 downloads a stub makensis.exe (~2.5KB) that cannot compile.
-    # Even when replaced with the real compiler, Command::new() may fail
-    # with os error 2 on GitHub Actions runners (MSVCP60.dll context issue).
-    # We work around this by running makensis.exe directly.
-    if ($tauriExitCode -ne 0) {
+    # Check if Tauri actually produced an installer (it may return exit 0 even
+    # when NSIS compilation failed internally, because Tauri catches the error).
+    $bundleNsisDir = "$TargetDir\bundle\nsis"
+    $installerExe = Get-ChildItem "$bundleNsisDir\*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($installerExe) {
+        Write-Step "  Installer produced by Tauri: $($installerExe.FullName)"
+    } else {
+        Write-Step "  No installer found in: $bundleNsisDir"
+    }
+
+    # If Tauri failed or produced no installer, try manual NSIS compilation.
+    # Tauri v2 may download a stub makensis.exe (~2.5KB) that cannot compile,
+    # or the compiler may fail due to resource path resolution issues.
+    if ($tauriExitCode -ne 0 -or (-not $installerExe)) {
+        if ($tauriExitCode -eq 0 -and -not $installerExe) {
+            Write-Step "  Tauri reported success but no installer was produced. Trying manual NSIS compilation..."
+        }
         $renderedScript = "$nsisOutputDir\installer.nsi"
         if (Test-Path $renderedScript) {
             Write-Step "  Rendered NSIS script exists. First 30 lines:"
@@ -320,7 +340,7 @@ function Invoke-TauriBuild {
 
     if ($tauriExitCode -ne 0) {
         Pop-Location
-        throw "Tauri build failed with exit code $LASTEXITCODE"
+        throw "Tauri build failed with exit code $tauriExitCode"
     }
 
     Pop-Location
