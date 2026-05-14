@@ -169,6 +169,20 @@ function Invoke-TauriBuild {
     if ($LASTEXITCODE -ne 0) { throw "pnpm build failed with exit code $LASTEXITCODE" }
 
     # Tauri build (uses NSIS from NSIS_DIR if set, otherwise downloads)
+    # Verify makensis.exe still exists right before cargo tauri build
+    $makensisCheck = "$env:LOCALAPPDATA\tauri\NSIS\makensis.exe"
+    if (Test-Path $makensisCheck) {
+        Write-Step "  makensis.exe before build: $((Get-Item $makensisCheck).Length) bytes"
+    } else {
+        Write-Err "  makensis.exe MISSING before cargo tauri build!"
+    }
+    # Also check if daemon binary still exists
+    $daemonCheck = "$ProjectRoot\target\release\gdriver-daemon.exe"
+    if (Test-Path $daemonCheck) {
+        Write-Step "  daemon before build: $((Get-Item $daemonCheck).Length) bytes"
+    } else {
+        Write-Err "  daemon MISSING before cargo tauri build!"
+    }
     Write-Step "  cargo tauri build --bundles $BuildMode"
     cargo tauri build --bundles $BuildMode
     if ($LASTEXITCODE -ne 0) {
