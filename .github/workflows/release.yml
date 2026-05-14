@@ -387,6 +387,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+
       - name: Download all artifacts
         uses: actions/download-artifact@v6
         with:
@@ -411,13 +413,33 @@ jobs:
           sort -u SHA256SUMS -o SHA256SUMS
           cat SHA256SUMS
 
-      - name: Get version from tag
+      - name: Determine version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Create tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists"
+          else
+            git tag "$VERSION"
+            git push origin "$VERSION"
+            echo "Created and pushed tag $VERSION"
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.version }}
           name: "gDriver ${{ steps.version.outputs.version }}"
           body: |
             ## gDriver ${{ steps.version.outputs.version }}
