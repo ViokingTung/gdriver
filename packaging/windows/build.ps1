@@ -184,7 +184,12 @@ function Invoke-TauriBuild {
         Write-Err "  daemon MISSING before cargo tauri build!"
     }
     Write-Step "  cargo tauri build --bundles $BuildMode"
-    cargo tauri build --bundles $BuildMode
+    cargo tauri build --bundles $BuildMode 2>&1 | ForEach-Object {
+        $line = $_.ToString()
+        if ($line -match "nsis|makensis|NSIS|bundle|Error|error|failed|not found|File:") {
+            Write-Step "  TAURI: $line"
+        }
+    }
     if ($LASTEXITCODE -ne 0) {
         Pop-Location
         throw "Tauri build failed with exit code $LASTEXITCODE"
